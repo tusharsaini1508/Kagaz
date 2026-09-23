@@ -76,11 +76,12 @@ Still open, tracked in `docs/decisions/`:
 ## Repository layout
 
 ```
+.claude/          Shared Claude Code config: permission rules, guard hooks, skills
 .github/          Pull request template, issue templates, CI, code owners
 backend/          FastAPI application, workers, readers, database migrations
 frontend/         Next.js application and the page viewer
 infra/            AWS CDK definitions
-docs/             Design notes, one page per topic
+docs/prd/         One PRD per sprint, written before any code
 docs/decisions/   Decision records: what we chose, what we rejected, and why
 ```
 
@@ -134,9 +135,9 @@ The backend and frontend jobs skip themselves until those folders exist, so CI i
 
 ## How we work
 
-Read [CONTRIBUTING.md](CONTRIBUTING.md) before your first pull request. It covers branch names, pull request size, review, and the rules that are never bent.
+**Read [CONTRIBUTING.md](CONTRIBUTING.md) before you do anything else.** It is the full process, stage by stage: understanding a sprint, writing the PRD, getting it approved, picking up an issue, branching, building, testing, opening the pull request, review, merge, and sign off. It also lists the rules that are never bent, and what to do when you are stuck.
 
-If you use Claude Code on this repository, [CLAUDE.md](CLAUDE.md) is loaded automatically and carries the same rules in a form the assistant follows.
+If you use Claude Code here, [CLAUDE.md](CLAUDE.md) loads automatically and carries the same rules in a form the assistant follows. Two skills are set up for you: `/sprint-prd` drafts the sprint brief, and `/pr-check` checks your branch before you open a pull request. See [.claude/README.md](.claude/README.md).
 
 ---
 
