@@ -1,0 +1,316 @@
+name: CI
+
+# Runs on pull requests into master only. Nothing runs on master after a merge,
+# by design: with squash merging from an up to date branch, the code that was
+# tested on the branch is the code that lands.
+#
+# The Guardrails job is a required check in the master ruleset, so a red run
+# blocks the merge. Backend and Frontend are not required checks yet: they skip
+# themselves until those folders exist, and a skipped job can sit in pending
+# forever. Add them as required checks in Sprint 1, once they actually run.
+
+on:
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  BACKEND_DIR: backend
+  FRONTEND_DIR: frontend
+  PYTHON_VERSION: "3.12"
+  NODE_VERSION: "20"
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Always runs. Fast, no toolchain needed. Catches the things that hurt most.
+  # ---------------------------------------------------------------------------
+  guardrails:
+    name: Guardrails
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: No secret files committed
+        run: |
+          set -euo pipefail
+          BAD=$(git ls-files | grep -Ei '(^|/)\.env($|\.)|\.pem$|\.p12$|\.pfx$|(^|/)id_rsa$|\.keystore$' || true)
+          if [ -n "$BAD" ]; then
+            echo "::error::Files that must never be committed are in this branch."
+            echo "$BAD"
+            echo "Remove them, rotate anything inside them, and tell Vrushit."
+            exit 1
+          fi
+          echo "Clean. No env or key files committed."
+
+      - name: No secret values in the diff
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          if [ -z "${BASE:-}" ]; then echo "Not a pull request, skipping."; exit 0; fi
+          ADDED=$(git diff --unified=0 "$BASE" "$HEAD" | grep '^+' | grep -v '^+++' || true)
+          FOUND=0
+          check() {
+            if printf '%s' "$ADDED" | grep -Eq "$1"; then
+              echo "::error::Possible $2 added in this pull request."
+              FOUND=1
+            fi
+          }
+          check 'AKIA[0-9A-Z]{16}'                     "AWS access key id"
+          check 'aws_secret_access_key[[:space:]]*='   "AWS secret key"
+          check 'BEGIN [A-Z ]*PRIVATE KEY'             "private key"
+          check 'gh[pousr]_[A-Za-z0-9]{36}'            "GitHub token"
+          check 'sk-[A-Za-z0-9]{20,}'                  "API key"
+          check 'postgres(ql)?://[^:]+:[^@]+@'         "database password in a connection string"
+          if [ "$FOUND" -eq 1 ]; then
+            echo "If this is a false positive, say so in the pull request and Vrushit will decide."
+            exit 1
+          fi
+          echo "Clean. No secret shaped strings added."
+
+      - name: No identity numbers in the code
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          if [ -z "${BASE:-}" ]; then echo "Not a pull request, skipping."; exit 0; fi
+          ADDED=$(git diff --unified=0 "$BASE" "$HEAD" | grep '^+' | grep -v '^+++' || true)
+          # Aadhaar is usually written as four, four, four. PAN is five letters,
+          # four digits, one letter. Warning only: real test fixtures may need
+          # deliberately fake examples, and Vrushit decides case by case.
+          if printf '%s' "$ADDED" | grep -Eq '[0-9]{4}[ -][0-9]{4}[ -][0-9]{4}'; then
+            echo "::warning::Something shaped like an Aadhaar number was added. Confirm it is fake and that nothing real can reach a table, a log, or a prompt."
+          fi
+          if printf '%s' "$ADDED" | grep -Eq '[A-Z]{5}[0-9]{4}[A-Z]'; then
+            echo "::warning::Something shaped like a PAN was added. Confirm it is fake."
+          fi
+          echo "Identity number scan done."
+
+      - name: No merge conflict markers
+        run: |
+          set -euo pipefail
+          if git grep -nE '^(<<<<<<< |>>>>>>> |=======$)' -- . ':!*.md' >/dev/null 2>&1; then
+            echo "::error::Merge conflict markers are still in the code."
+            git grep -nE '^(<<<<<<< |>>>>>>> |=======$)' -- . ':!*.md' || true
+            exit 1
+          fi
+          echo "Clean. No conflict markers."
+
+      - name: No large or customer files committed
+        run: |
+          set -euo pipefail
+          BIG=$(git ls-files -z | xargs -0 -r du -k 2>/dev/null | awk '$1 > 2048 { print $1 "KB  " $2 }' || true)
+          if [ -n "$BIG" ]; then
+            echo "::error::Files over 2MB are in this branch. Customer documents and test corpora belong in storage, never in git."
+            echo "$BIG"
+            exit 1
+          fi
+          echo "Clean. Nothing oversized."
+
+      - name: Pull request size
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          if [ -z "${BASE:-}" ]; then echo "Not a pull request, skipping."; exit 0; fi
+          CHANGED=$(git diff --numstat "$BASE" "$HEAD" \
+            | grep -vE '\.(lock|sum)$|package-lock\.json|poetry\.lock|yarn\.lock|uv\.lock' \
+            | awk '{ a += $1; d += $2 } END { print a + d + 0 }')
+          echo "Changed lines, excluding lock files: $CHANGED"
+          if [ "$CHANGED" -gt 600 ]; then
+            echo "::error::$CHANGED changed lines is too big to review properly. Split this pull request."
+            exit 1
+          elif [ "$CHANGED" -gt 300 ]; then
+            echo "::warning::$CHANGED changed lines. The target is about 300."
+          fi
+
+      - name: Pull request title format
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          set -euo pipefail
+          if [ -z "${TITLE:-}" ]; then exit 0; fi
+          if printf '%s' "$TITLE" | grep -Eq '^(feat|fix|chore|docs|test|infra)\(s[1-4]\): .+'; then
+            echo "Title format is good."
+          else
+            echo "::warning::Title should look like 'feat(s1): upload endpoint with deduplication'. Got: $TITLE"
+          fi
+
+  # ---------------------------------------------------------------------------
+  # Works out which projects exist yet, so the jobs below can skip themselves.
+  # ---------------------------------------------------------------------------
+  detect:
+    name: What exists
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    outputs:
+      backend: ${{ steps.look.outputs.backend }}
+      frontend: ${{ steps.look.outputs.frontend }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: look
+        run: |
+          set -euo pipefail
+          if [ -f "$BACKEND_DIR/pyproject.toml" ] || [ -f "$BACKEND_DIR/requirements.txt" ]; then
+            echo "backend=true" >> "$GITHUB_OUTPUT"
+            echo "Backend found in $BACKEND_DIR."
+          else
+            echo "backend=false" >> "$GITHUB_OUTPUT"
+            echo "No backend yet."
+          fi
+          if [ -f "$FRONTEND_DIR/package.json" ]; then
+            echo "frontend=true" >> "$GITHUB_OUTPUT"
+            echo "Frontend found in $FRONTEND_DIR."
+          else
+            echo "frontend=false" >> "$GITHUB_OUTPUT"
+            echo "No frontend yet."
+          fi
+
+  # ---------------------------------------------------------------------------
+  # Backend. Runs against a real Postgres with pgvector, because the isolation
+  # tests are meaningless against a fake database.
+  # ---------------------------------------------------------------------------
+  backend:
+    name: Backend
+    needs: detect
+    if: needs.detect.outputs.backend == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_USER: kaagaz
+          POSTGRES_PASSWORD: kaagaz_ci_only
+          POSTGRES_DB: kaagaz_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U kaagaz"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://kaagaz:kaagaz_ci_only@localhost:5432/kaagaz_test
+      PYTHONDONTWRITEBYTECODE: "1"
+
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          if [ -f pyproject.toml ]; then
+            pip install -e ".[dev]"
+          else
+            pip install -r requirements.txt
+            [ -f requirements-dev.txt ] && pip install -r requirements-dev.txt
+          fi
+
+      - name: Lint
+        run: ruff check .
+
+      - name: Format
+        run: ruff format --check .
+
+      - name: Types
+        run: mypy .
+
+      - name: Dependency licences
+        run: |
+          set -euo pipefail
+          pip install pip-licenses
+          pip-licenses --format=csv --with-urls > licences.csv
+          echo "Installed packages and their licences:"
+          cat licences.csv
+          if grep -Eiq 'affero|AGPL|SSPL|"GNU General Public License v3' licences.csv; then
+            echo "::error::A dependency uses a licence that makes commercial SaaS unsafe."
+            grep -Ei 'affero|AGPL|SSPL|GNU General Public License v3' licences.csv
+            echo "This is the PyMuPDF trap. Do not merge. Talk to Vrushit."
+            exit 1
+          fi
+          echo "All dependency licences are safe for a commercial product."
+
+      - name: Migrations apply from an empty database
+        run: |
+          set -euo pipefail
+          if [ -f alembic.ini ]; then
+            alembic upgrade head
+            echo "Migrations applied cleanly."
+          else
+            echo "No migrations yet, skipping."
+          fi
+
+      - name: Customer isolation tests
+        run: |
+          set -euo pipefail
+          echo "These run first and on their own. A failure here is the worst"
+          echo "thing that can happen to this product, so it must be unmissable."
+          pytest -m isolation -v --no-header
+
+      - name: Tests
+        run: pytest -v --no-header --durations=10
+
+  # ---------------------------------------------------------------------------
+  # Frontend.
+  # ---------------------------------------------------------------------------
+  frontend:
+    name: Frontend
+    needs: detect
+    if: needs.detect.outputs.frontend == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Types
+        run: npm run typecheck --if-present
+
+      - name: Tests
+        run: npm test --if-present
+
+      - name: Build
+        run: npm run build

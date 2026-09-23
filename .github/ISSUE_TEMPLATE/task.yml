@@ -1,0 +1,59 @@
+name: Task
+description: A piece of work from the sprint plan
+title: "[S?] "
+labels: ["type:feat"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        A task is not ready to start until the acceptance criteria are filled in.
+
+  - type: dropdown
+    id: sprint
+    attributes:
+      label: Sprint
+      options:
+        - "Sprint 1 - Foundation"
+        - "Sprint 2 - The Answer (MVP)"
+        - "Sprint 3 - Trust"
+        - "Sprint 4 - Launch"
+        - "After launch"
+    validations:
+      required: true
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What needs to exist
+      description: Describe the outcome, not the implementation.
+      placeholder: A file uploaded through the API is stored, fingerprinted, and queued for processing.
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: How we will both know this is done. Each line must be checkable by someone else.
+      value: |
+        - [ ]
+        - [ ]
+        - [ ]
+    validations:
+      required: true
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes, constraints, and anything already decided
+      description: Link any decision record, design note, or earlier discussion.
+
+  - type: checkboxes
+    id: guards
+    attributes:
+      label: Does this touch anything that needs a plan approved first?
+      options:
+        - label: The database schema
+        - label: Customer separation
+        - label: A new dependency
+        - label: None of these

@@ -1,0 +1,51 @@
+name: Bug
+description: Something does not work the way it should
+title: "[Bug] "
+labels: ["type:fix"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What should have happened
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: How to reproduce it
+      value: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: severity
+    attributes:
+      label: How bad is it
+      options:
+        - "Blocking, nothing else matters"
+        - "Serious, fix this sprint"
+        - "Annoying, fix when there is room"
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Safety check
+      description: Tick any that apply. Any tick makes this blocking, whatever the severity above says.
+      options:
+        - label: One customer could see another customer's data
+        - label: A full Aadhaar or PAN number appeared somewhere it should not
+        - label: An answer was shown as fact without a source
+        - label: A secret was exposed

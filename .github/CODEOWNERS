@@ -1,0 +1,8 @@
+# Vrushit reviews everything. This makes him a required reviewer once
+# branch protection has "require review from Code Owners" switched on.
+*       @vrushitpatel
+
+# Extra care on the pieces that are expensive to get wrong.
+/.github/        @vrushitpatel
+/docs/decisions/ @vrushitpatel
+CLAUDE.md        @vrushitpatel
