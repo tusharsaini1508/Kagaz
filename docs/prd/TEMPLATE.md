@@ -52,24 +52,10 @@ what, and where you get stuck.
 fine and expected. Not estimating means nobody notices you are behind until the
 last day.
 
----
-
-## 5. How I intend to build the tricky parts
-
-Pick the two or three items above that are not obvious, and describe your
-approach in a short paragraph each. Not code, just the shape of it: which
-components, what talks to what, what gets stored where.
-
-This is the section Vrushit will push back on hardest, and that is the point.
-Being corrected here costs ten minutes. Being corrected in review costs a day.
-
-**<issue title>**
-
-**<issue title>**
 
 ---
 
-## 6. Decisions I am making myself
+## 5. Decisions I am making myself
 
 Choices you are taking without asking, and the reason. Library choices, file
 layout, naming, data shapes. If Vrushit disagrees with one, he will say so here
@@ -81,7 +67,7 @@ does **not** belong in this list. Those need approval, so put them in section 7.
 -
 -
 
-## 7. Things I need approved before I start
+## 6. Things I need approved before I start
 
 Anything from CLAUDE.md that requires a decision from Vrushit: schema changes,
 customer separation, new dependencies including their licences.
@@ -91,7 +77,7 @@ customer separation, new dependencies including their licences.
 |  |  | [ ] |
 |  |  | [ ] |
 
-## 8. Questions
+## 7. Questions
 
 Everything you are unsure about. There is no such thing as too many here, and a
 question you did not ask becomes a day of rework.
@@ -100,7 +86,7 @@ question you did not ask becomes a day of rework.
 2.
 3.
 
-## 9. What could make this slip
+## 8. What could make this slip
 
 The parts you are least confident about, and what you would drop first if the
 sprint runs long. Say it now, while it is a plan rather than an excuse.
@@ -110,7 +96,7 @@ sprint runs long. Say it now, while it is a plan rather than an excuse.
 
 ---
 
-## 10. Before I start, I confirm
+## 9. Before I start, I confirm
 
 - [ ] I have read CLAUDE.md and CONTRIBUTING.md in this sprint, not just once months ago
 - [ ] Every issue I listed has acceptance criteria, and I understand each one

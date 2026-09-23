@@ -170,6 +170,11 @@ cdk.out/
 *.tfstate.*
 .terraform/
 
+# Claude Code. settings.json, hooks/ and skills/ ARE committed, they are shared
+# guardrails. Only personal overrides and local state stay out.
+.claude/settings.local.json
+.claude/PROGRESS.md
+
 # Editors and OS
 .idea/
 .vscode/*

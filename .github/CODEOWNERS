@@ -1,8 +1,11 @@
-# Vrushit reviews everything. This makes him a required reviewer once
-# branch protection has "require review from Code Owners" switched on.
-*       @vrushitpatel
+# Vrushit reviews everything. With "require review from Code Owners" on in the
+# master ruleset, this makes him a required reviewer on every pull request.
+*                @vrushitpatel
 
-# Extra care on the pieces that are expensive to get wrong.
+# These run on a maintainer's machine, or decide what reaches master. The
+# repository is public, so anyone can propose a change to them. Keep them
+# explicit here so the ownership survives any future change to the line above.
+/.claude/        @vrushitpatel
 /.github/        @vrushitpatel
 /docs/decisions/ @vrushitpatel
 CLAUDE.md        @vrushitpatel
