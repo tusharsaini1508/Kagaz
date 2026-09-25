@@ -9,6 +9,7 @@ import unittest
 from dataclasses import dataclass
 
 from kaagaz.ingestion import sniff
+from kaagaz.ingestion.policy import UploadPolicy
 from kaagaz.ingestion.ports import Job
 from kaagaz.ingestion.service import UploadService
 from kaagaz.jobs.worker import JobFailed, Worker
@@ -16,6 +17,7 @@ from kaagaz.masking.identity import IndianIdMasker
 from kaagaz.pipeline import DocumentProcessor, IdentityMasker
 from kaagaz.reading.csv_reader import CsvReader
 from kaagaz.reading.socket import ReaderSocket
+from kaagaz.reading.xlsx_reader import XlsxLimits, XlsxReader
 from kaagaz.scanning.gate import DocumentStatus, ScanGate, Verdict
 from tests.fakes import (
     FakeMasker,
@@ -27,9 +29,12 @@ from tests.fakes import (
 )
 from tests.lease_queue import FakeClock, LeaseQueue
 from tests.support import PDF_BYTES, TEST_POLICY, SeqIds
+from tests.xlsx_builder import make_xlsx, make_zip, sheet_xml
 
 CUSTOMER = "cust-a"
 CSV = b"invoice,amount\nINV-1,100\nINV-2,250\n"
+# Real .xlsx files are a few KB, so the pipeline tests allow more than TEST_POLICY.
+PIPELINE_POLICY = UploadPolicy(max_bytes=100_000, allowed_types=TEST_POLICY.allowed_types)
 
 
 @dataclass
@@ -51,10 +56,11 @@ def build(verdict: Verdict = Verdict.CLEAN, masker: IdentityMasker | None = None
     clock = FakeClock()
     queue = LeaseQueue(clock, lease_seconds=30, max_attempts=3)
     repo, storage, statuses, pieces = MemoryRepository(), MemoryStorage(), MemoryStatuses(), MemoryPieces()
-    upload = UploadService(TEST_POLICY, repo, storage, queue, new_id=SeqIds())
+    upload = UploadService(PIPELINE_POLICY, repo, storage, queue, new_id=SeqIds())
     scanner = FakeScanner(verdict)
     gate = ScanGate(storage, scanner, storage, statuses)
-    socket = ReaderSocket({sniff.TEXT: CsvReader(max_cells=10_000)})
+    xlsx_limits = XlsxLimits(max_entries=100, max_member_bytes=100_000, max_total_bytes=500_000, max_cells=10_000)
+    socket = ReaderSocket({sniff.TEXT: CsvReader(max_cells=10_000), sniff.ZIP: XlsxReader(xlsx_limits)})
     processor = DocumentProcessor(gate, statuses, repo, socket, masker or FakeMasker(), pieces)
     return System(
         upload, Worker(queue, processor), processor, queue, clock, statuses, pieces, storage, scanner, repo, gate
@@ -75,6 +81,25 @@ class PipelineTest(unittest.TestCase):
         ])
         self.assertIs(system.statuses.get_status(CUSTOMER, doc), DocumentStatus.READY)
         self.assertEqual(system.queue.pending(), 0)
+
+    def test_excel_file_becomes_one_piece_per_row(self) -> None:
+        system = build()
+        workbook = make_xlsx(
+            [("Sales", sheet_xml('<row r="1"><c r="A1" t="s"><v>0</v></c><c r="B1"><v>250</v></c></row>'))],
+            shared_strings=["INV-2"],
+        )
+        doc = system.upload.accept(CUSTOMER, io.BytesIO(workbook)).document_id
+        system.worker.run_once()
+        self.assertEqual([p.text for p in system.pieces.for_document(CUSTOMER, doc)], ["A: INV-2 | B: 250"])
+        self.assertIs(system.statuses.get_status(CUSTOMER, doc), DocumentStatus.READY)
+
+    def test_word_file_is_marked_needs_a_reader(self) -> None:
+        system = build()
+        docx = make_zip({"word/document.xml": b"<document/>"})
+        doc = system.upload.accept(CUSTOMER, io.BytesIO(docx)).document_id
+        system.worker.run_once()
+        self.assertIs(system.statuses.get_status(CUSTOMER, doc), DocumentStatus.NEEDS_READER)
+        self.assertEqual(system.queue.failed, {})
 
     def test_pdf_is_marked_needs_a_reader_and_the_job_ends_normally(self) -> None:
         system = build()

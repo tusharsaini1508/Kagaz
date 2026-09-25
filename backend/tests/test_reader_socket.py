@@ -71,8 +71,10 @@ class NoDirectReaderCallsTest(unittest.TestCase):
             if path.stem not in self.ALLOWED
         }
 
-    def test_the_rule_knows_the_csv_reader(self) -> None:
-        self.assertIn("kaagaz.reading.csv_reader", self.reader_modules())
+    def test_the_rule_knows_every_reader(self) -> None:
+        self.assertLessEqual(
+            {"kaagaz.reading.csv_reader", "kaagaz.reading.xlsx_reader"}, self.reader_modules()
+        )
 
     def test_only_the_reading_package_imports_reader_modules(self) -> None:
         forbidden = self.reader_modules()

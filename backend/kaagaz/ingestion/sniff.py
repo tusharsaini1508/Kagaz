@@ -23,7 +23,7 @@ PDF = "pdf"
 PNG = "png"
 JPEG = "jpeg"
 TIFF = "tiff"
-ZIP = "zip"  # .xlsx, .docx and other zip containers, told apart after the scan
+ZIP = "zip"  # .xlsx, .docx and other zip containers; the xlsx reader tells them apart after the scan
 OLE2 = "ole2"  # old .xls and .doc, not told apart
 TEXT = "text"  # CSV and other plain UTF-8 text
 
