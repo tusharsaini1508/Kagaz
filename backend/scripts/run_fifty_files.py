@@ -103,7 +103,7 @@ def main() -> None:
     socket = ReaderSocket({
         sniff.TEXT: CsvReader(max_cells=100_000),
         sniff.ZIP: XlsxReader(XlsxLimits(max_entries=200, max_member_bytes=5_000_000,
-                                         max_total_bytes=20_000_000, max_cells=100_000)),
+                                         max_total_bytes=20_000_000, max_cells=100_000, max_text_chars=10_000_000)),
     })
     gate = ScanGate(storage, MarkerScanner(), storage, statuses)
     worker = Worker(queue, DocumentProcessor(gate, statuses, repo, socket, IndianIdMasker(), pieces))

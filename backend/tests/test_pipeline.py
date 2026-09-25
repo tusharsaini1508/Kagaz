@@ -59,7 +59,7 @@ def build(verdict: Verdict = Verdict.CLEAN, masker: IdentityMasker | None = None
     upload = UploadService(PIPELINE_POLICY, repo, storage, queue, new_id=SeqIds())
     scanner = FakeScanner(verdict)
     gate = ScanGate(storage, scanner, storage, statuses)
-    xlsx_limits = XlsxLimits(max_entries=100, max_member_bytes=100_000, max_total_bytes=500_000, max_cells=10_000)
+    xlsx_limits = XlsxLimits(max_entries=100, max_member_bytes=100_000, max_total_bytes=500_000, max_cells=10_000, max_text_chars=10_000_000)
     socket = ReaderSocket({sniff.TEXT: CsvReader(max_cells=10_000), sniff.ZIP: XlsxReader(xlsx_limits)})
     processor = DocumentProcessor(gate, statuses, repo, socket, masker or FakeMasker(), pieces)
     return System(
