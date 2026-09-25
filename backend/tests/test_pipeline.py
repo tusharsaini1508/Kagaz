@@ -12,7 +12,8 @@ from kaagaz.ingestion import sniff
 from kaagaz.ingestion.ports import Job
 from kaagaz.ingestion.service import UploadService
 from kaagaz.jobs.worker import JobFailed, Worker
-from kaagaz.pipeline import DocumentProcessor
+from kaagaz.masking.identity import IndianIdMasker
+from kaagaz.pipeline import DocumentProcessor, IdentityMasker
 from kaagaz.reading.csv_reader import CsvReader
 from kaagaz.reading.socket import ReaderSocket
 from kaagaz.scanning.gate import DocumentStatus, ScanGate, Verdict
@@ -46,7 +47,7 @@ class System:
     gate: ScanGate
 
 
-def build(verdict: Verdict = Verdict.CLEAN) -> System:
+def build(verdict: Verdict = Verdict.CLEAN, masker: IdentityMasker | None = None) -> System:
     clock = FakeClock()
     queue = LeaseQueue(clock, lease_seconds=30, max_attempts=3)
     repo, storage, statuses, pieces = MemoryRepository(), MemoryStorage(), MemoryStatuses(), MemoryPieces()
@@ -54,7 +55,7 @@ def build(verdict: Verdict = Verdict.CLEAN) -> System:
     scanner = FakeScanner(verdict)
     gate = ScanGate(storage, scanner, storage, statuses)
     socket = ReaderSocket({sniff.TEXT: CsvReader(max_cells=10_000)})
-    processor = DocumentProcessor(gate, statuses, repo, socket, FakeMasker(), pieces)
+    processor = DocumentProcessor(gate, statuses, repo, socket, masker or FakeMasker(), pieces)
     return System(
         upload, Worker(queue, processor), processor, queue, clock, statuses, pieces, storage, scanner, repo, gate
     )
@@ -118,6 +119,16 @@ class PipelineTest(unittest.TestCase):
         texts = [p.text for p in system.pieces.for_document(CUSTOMER, doc)]
         self.assertEqual(texts, ["A: name | B: id", "A: Asha | B: ******"])
         self.assertFalse(any(FakeMasker.MARKER in t for t in texts))
+
+    def test_real_masker_keeps_pan_and_aadhaar_out_of_stored_pieces(self) -> None:
+        system = build(masker=IndianIdMasker())
+        fake = b"name,pan,aadhaar\nAsha,ABCDE1234F,2345 6789 0123\n"  # FAKE numbers
+        doc = system.upload.accept(CUSTOMER, io.BytesIO(fake)).document_id
+        system.worker.run_once()
+        stored = " ".join(p.text for p in system.pieces.for_document(CUSTOMER, doc))
+        self.assertNotIn("ABCDE1234F", stored)
+        self.assertNotIn("2345 6789", stored)
+        self.assertIn("XXXXXX234F", stored)
 
     def test_file_changed_after_upload_is_refused(self) -> None:
         system = build()
