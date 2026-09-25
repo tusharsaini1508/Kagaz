@@ -11,15 +11,23 @@
 | `kaagaz/ingestion/` | #14 | Upload: read once (SHA-256, size limit), type from first bytes, per-customer duplicates, store, record, queue, undo on failure |
 | `kaagaz/jobs/` | #16 | Worker: one job at a time, retries through leases, failure bin, heartbeat for long jobs |
 | `kaagaz/scanning/` | #15 | Virus gate: only an explicit CLEAN goes on; REJECTED is final |
-| `kaagaz/reading/` | #19, #21 | Reader plug socket and the CSV reader; every value keeps its sheet, row and column |
+| `kaagaz/reading/` | #19, #21 | Reader plug socket, the CSV reader and the Excel (.xlsx) reader; every value keeps its sheet, row and column |
+| `kaagaz/masking/` | never-do 3 | Masks full Aadhaar and PAN numbers before anything is kept (PROVISIONAL rule) |
 | `kaagaz/chunking/` | #20 | One text piece per row, each tracing back to its cells |
 | `kaagaz/pipeline.py` | glue | The job handler: record, scan, fingerprint check, read, mask, pieces, status |
-| `tests/` | #23, #25, #26 | Tests, in-memory fakes, and the lease queue |
+| `tests/` | #23, #25, #26 | Tests, in-memory fakes, the lease queue, an .xlsx builder |
+| `scripts/run_fifty_files.py` | #24 | Fifty made-up files through the whole pipeline, with outcomes and timings |
 
 Outside systems (database, file storage, queue, scanner, masker) are small
 interfaces ("ports") in the code. Only test fakes implement them today. The
 real ones come after Vrushit's designs: #1 and #2 (database), #9 (local
 setup), #11 (storage naming), the scanner choice, and the masking rule.
+
+## Run the fifty-file check
+
+```
+python -m scripts.run_fifty_files
+```
 
 ## Run the tests
 
