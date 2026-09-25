@@ -22,11 +22,14 @@ Each partial failure is undone in reverse order:
   simply upload again. Without this undo, the retry would be reported as a
   duplicate of a document that is never processed.
 
-Every undo step runs even if an earlier one fails, and the original error is
-always the one raised; a failed undo step is added to it as a note.
+Undo steps run in order and stop at the first one that fails, because each
+depends on the one before: the file is never deleted while a record still
+points at it. The original error is always the one raised; the failed step is
+added to it as a note.
 
-Known leftovers, when the undo itself cannot reach the backend: a record with
-no job, or a stored file with no record. Finding and fixing those later (an
+Known leftovers, when the undo itself cannot reach the backend: a record and
+its file with no job (removing the record failed), or a stored file with no
+record (deleting the file failed). Finding and fixing those later (an
 outbox, or re-queueing records that never ran) is database and queue design,
 so it is PROVISIONAL and Vrushit's (#1, #16). Also rare: a race loser is told
 "duplicate" of a winner that then fails to queue and is rolled back.
@@ -119,7 +122,7 @@ class UploadService:
             raise
 
         if not created:
-            self._storage.delete(customer_id, record.document_id)
+            delete_file()
             return UploadResult(stored.document_id, duplicate=True)
 
         try:
@@ -132,14 +135,15 @@ class UploadService:
 
 
 def _undo(error: BackendUnavailable, *steps: Callable[[], None]) -> None:
-    """Run every undo step, even if one fails, without hiding ``error``.
+    """Run the undo steps in order, stopping at the first that fails.
 
-    A step that fails is recorded on ``error`` by name only, never with data.
-    Only BackendUnavailable is caught; any other exception is a bug and
-    propagates.
+    ``error`` is never replaced; a failed step is noted on it by name only,
+    never with data. Only BackendUnavailable is caught; any other exception
+    is a bug and propagates.
     """
     for step in steps:
         try:
             step()
         except BackendUnavailable:
             error.add_note(f"undo step failed: {step.__name__}")
+            return

@@ -1,8 +1,9 @@
 """In-memory stand-ins for the database, file storage and queue.
 
-Test-only. They follow the port contracts in kaagaz.ingestion.ports, keyed by
-customer first, so a cross-customer test can actually fail. They are never
-used by product code.
+Test-only. They follow the port contracts in kaagaz.ingestion.ports,
+kaagaz.scanning.gate (status store, scanner, quarantine) and kaagaz.pipeline
+(piece store, masker), keyed by customer first, so a cross-customer test can
+actually fail. They are never used by product code.
 """
 
 import threading
@@ -110,7 +111,10 @@ class MemoryStorage:
 
 
 class MemoryStatuses:
-    """Document status keyed by (customer_id, document_id)."""
+    """Document status keyed by (customer_id, document_id).
+
+    Like the real store must, it never moves a document out of REJECTED.
+    """
 
     def __init__(self) -> None:
         self._statuses: dict[tuple[str, str], DocumentStatus] = {}
@@ -119,14 +123,17 @@ class MemoryStatuses:
         return self._statuses.get((customer_id, document_id))
 
     def set_status(self, customer_id: str, document_id: str, status: DocumentStatus) -> None:
-        self._statuses[(customer_id, document_id)] = status
+        key = (customer_id, document_id)
+        if self._statuses.get(key) is DocumentStatus.REJECTED:
+            return  # final
+        self._statuses[key] = status
 
 
 class FakeScanner:
     """Returns a preset verdict, or raises ScannerError. Records what it saw."""
 
     def __init__(self, verdict: object = None, *, error: bool = False) -> None:
-        self._verdict = verdict
+        self.verdict = verdict
         self._error = error
         self.scanned: list[bytes] = []
 
@@ -134,7 +141,7 @@ class FakeScanner:
         self.scanned.append(data)
         if self._error:
             raise ScannerError("scanner down")
-        return self._verdict
+        return self.verdict
 
 
 class MemoryQueue:

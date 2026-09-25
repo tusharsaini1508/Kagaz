@@ -11,14 +11,15 @@ column letter instead, for example "A: INV-1 | B: 100".
 PROVISIONAL: the piece shape waits for the database design (#1) and the
 reader contract (#3). Text blocks for PDFs come with the first PDF reader.
 
-Time is O(n log n) in the worst case for n spans: one pass to group them by
-row, a sort of the row keys, and a sort of each row's cells by column (one
-very wide row costs O(n log n)). Readers already give cells in order, so in
-practice the sorts are cheap.
+Time is O(n log n) in the worst case for n spans: one stable sort by
+(sheet, row, column), then one pass that groups each row. Readers already
+give cells in order, and Python's sort is O(n) on sorted input, so in
+practice it is linear.
 """
 
 from collections.abc import Iterable
 from dataclasses import dataclass
+from itertools import groupby
 
 from kaagaz.reading.spans import CellLocation, Span
 
@@ -45,13 +46,10 @@ def column_letter(column: int) -> str:
 
 
 def pieces_from_rows(customer_id: str, document_id: str, spans: Iterable[Span]) -> list[Piece]:
-    rows: dict[tuple[int, int], list[Span]] = {}
-    for span in spans:
-        rows.setdefault((span.location.sheet, span.location.row), []).append(span)
-
+    ordered = sorted(spans, key=lambda s: s.location)  # (sheet, row, column)
     pieces = []
-    for (sheet, row) in sorted(rows):
-        row_spans = sorted(rows[(sheet, row)], key=lambda s: s.location.column)
+    for (sheet, row), group in groupby(ordered, key=lambda s: (s.location.sheet, s.location.row)):
+        row_spans = list(group)
         pieces.append(
             Piece(
                 customer_id=customer_id,

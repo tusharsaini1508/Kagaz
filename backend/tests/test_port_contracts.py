@@ -10,6 +10,8 @@ import io
 import unittest
 
 from kaagaz.ingestion.ports import BlobNotFound
+from kaagaz.scanning.gate import DocumentStatus
+from tests.fakes import MemoryStatuses
 from tests.support import PDF_BYTES, make_service
 
 A, B = "cust-a", "cust-b"
@@ -34,6 +36,12 @@ class PortContractTest(unittest.TestCase):
         storage.delete(B, a.document_id)
         self.assertEqual(storage.get(A, a.document_id), PDF_BYTES)
 
+    def test_status_never_moves_out_of_rejected(self) -> None:
+        statuses = MemoryStatuses()
+        statuses.set_status(A, "doc", DocumentStatus.REJECTED)
+        for later in (DocumentStatus.CLEAN, DocumentStatus.READY, DocumentStatus.NEEDS_READER):
+            statuses.set_status(A, "doc", later)
+        self.assertIs(statuses.get_status(A, "doc"), DocumentStatus.REJECTED)
 
 
 if __name__ == "__main__":

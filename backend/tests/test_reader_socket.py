@@ -38,15 +38,14 @@ class ReaderSocketTest(unittest.TestCase):
             "row zero": Span("text", "text", CellLocation(1, 0, 1)),
             "empty text": Span("", "", CellLocation(1, 1, 1)),
         }
+        class BadReader:
+            def __init__(self, span: Span) -> None:
+                self._span = span
+
+            def read(self, data: bytes) -> list[Span]:
+                return [self._span]
+
         for name, bad in bad_spans.items():
-
-            class BadReader:
-                def __init__(self, span: Span) -> None:
-                    self._span = span
-
-                def read(self, data: bytes) -> list[Span]:
-                    return [self._span]
-
             with self.subTest(name), self.assertRaises(ReadError) as ctx:
                 ReaderSocket({"bad": BadReader(bad)}).read("bad", b"")
             self.assertEqual(ctx.exception.code, "invalid_reader_output")

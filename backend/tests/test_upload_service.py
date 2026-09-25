@@ -112,39 +112,28 @@ class DuplicateTest(unittest.TestCase):
 
 
 class RejectTest(unittest.TestCase):
-    def assert_nothing_kept(self, repo: MemoryRepository, storage: MemoryStorage, queue: MemoryQueue) -> None:
+    def assert_rejected(self, data: bytes, code: RejectCode, policy: UploadPolicy = TEST_POLICY) -> None:
+        """The upload is refused with ``code`` and nothing is stored, recorded or queued."""
+        service, repo, storage, queue = make_service(policy)
+        with self.assertRaises(UploadRejected) as ctx:
+            service.accept(CUSTOMER, io.BytesIO(data))
+        self.assertIs(ctx.exception.code, code)
         self.assertEqual(repo.records_for(CUSTOMER), [])
         self.assertEqual(storage.count(), 0)
         self.assertEqual(queue.jobs, [])
 
     def test_empty_file(self) -> None:
-        service, repo, storage, queue = make_service()
-        with self.assertRaises(UploadRejected) as ctx:
-            service.accept(CUSTOMER, io.BytesIO(b""))
-        self.assertIs(ctx.exception.code, RejectCode.EMPTY_FILE)
-        self.assert_nothing_kept(repo, storage, queue)
+        self.assert_rejected(b"", RejectCode.EMPTY_FILE)
 
     def test_oversized_file(self) -> None:
-        service, repo, storage, queue = make_service()
-        with self.assertRaises(UploadRejected) as ctx:
-            service.accept(CUSTOMER, io.BytesIO(b"%PDF-" + b"0" * TEST_POLICY.max_bytes))
-        self.assertIs(ctx.exception.code, RejectCode.TOO_LARGE)
-        self.assert_nothing_kept(repo, storage, queue)
+        self.assert_rejected(b"%PDF-" + b"0" * TEST_POLICY.max_bytes, RejectCode.TOO_LARGE)
 
     def test_unrecognised_type(self) -> None:
-        service, repo, storage, queue = make_service()
-        with self.assertRaises(UploadRejected) as ctx:
-            service.accept(CUSTOMER, io.BytesIO(b"\x7fELF\x02\x01\x01\x00rest"))
-        self.assertIs(ctx.exception.code, RejectCode.UNSUPPORTED_TYPE)
-        self.assert_nothing_kept(repo, storage, queue)
+        self.assert_rejected(b"\x7fELF\x02\x01\x01\x00rest", RejectCode.UNSUPPORTED_TYPE)
 
     def test_recognised_type_that_is_not_allowed(self) -> None:
-        policy = UploadPolicy(max_bytes=1024, allowed_types=frozenset({sniff.TEXT}))
-        service, repo, storage, queue = make_service(policy)
-        with self.assertRaises(UploadRejected) as ctx:
-            service.accept(CUSTOMER, io.BytesIO(PDF_BYTES))
-        self.assertIs(ctx.exception.code, RejectCode.UNSUPPORTED_TYPE)
-        self.assert_nothing_kept(repo, storage, queue)
+        text_only = UploadPolicy(max_bytes=1024, allowed_types=frozenset({sniff.TEXT}))
+        self.assert_rejected(PDF_BYTES, RejectCode.UNSUPPORTED_TYPE, text_only)
 
     def test_rejection_message_is_only_the_code(self) -> None:
         service, _, _, _ = make_service()
@@ -185,15 +174,19 @@ class PartialFailureTest(unittest.TestCase):
 
 
 class FailedUndoTest(unittest.TestCase):
-    def test_queue_failure_still_deletes_the_file_when_removing_the_record_fails(self) -> None:
+    def test_file_is_kept_while_its_record_could_not_be_removed(self) -> None:
         service, repo, storage, queue = make_service()
         queue.fail_enqueue = True
         repo.fail_remove = True
         with self.assertRaises(BackendUnavailable) as ctx:
             service.accept(CUSTOMER, io.BytesIO(PDF_BYTES))
         self.assertEqual(str(ctx.exception), "queue down")  # the original error
-        self.assertIn("undo step failed: remove_record", ctx.exception.__notes__)
-        self.assertEqual(storage.count(), 0)
+        self.assertEqual(ctx.exception.__notes__, ["undo step failed: remove_record"])
+        # Documented leftover: record and file kept together, no job. Never a
+        # record pointing at a deleted file.
+        (record,) = repo.records_for(CUSTOMER)
+        self.assertEqual(storage.get(CUSTOMER, record.document_id), PDF_BYTES)
+        self.assertEqual(queue.jobs, [])
 
     def test_database_failure_keeps_its_own_error_when_deleting_the_file_fails(self) -> None:
         service, repo, storage, queue = make_service()

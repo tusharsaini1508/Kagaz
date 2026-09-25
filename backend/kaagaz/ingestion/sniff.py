@@ -17,6 +17,7 @@ until then markup could reach pieces, which must be fixed before real use.
 """
 
 import codecs
+import re
 
 PDF = "pdf"
 PNG = "png"
@@ -50,10 +51,10 @@ def detect_type(head: bytes) -> str | None:
     return None
 
 
-# Control bytes allowed in text: tab, line feed, form feed, carriage return.
-# Every other byte below 0x20, and DEL (0x7f), means "not plain text".
-_ALLOWED_CONTROL = frozenset(b"\t\n\x0c\r")
-_FORBIDDEN_CONTROL = bytes(b for b in [*range(0x20), 0x7F] if b not in _ALLOWED_CONTROL)
+# Control bytes other than tab, line feed, form feed and carriage return, and
+# DEL, mean "not plain text". The CSV reader checks the whole file with this
+# too: in valid UTF-8 these bytes only ever stand for these characters.
+FORBIDDEN_CONTROL = re.compile(rb"[\x00-\x08\x0b\x0e-\x1f\x7f]")
 
 
 def _looks_like_utf8_text(head: bytes) -> bool:
@@ -64,8 +65,7 @@ def _looks_like_utf8_text(head: bytes) -> bool:
     character is not an error. HTML or SVG also pass this check; they are
     only ever treated as plain text, never rendered.
     """
-    # bytes.translate with a delete table keeps the scan in C: O(len(head)).
-    if not head or len(head.translate(None, _FORBIDDEN_CONTROL)) != len(head):
+    if not head or FORBIDDEN_CONTROL.search(head):
         return False
     decoder = codecs.getincrementaldecoder("utf-8")(errors="strict")
     try:

@@ -9,8 +9,9 @@ import unittest
 from dataclasses import dataclass
 
 from kaagaz.ingestion import sniff
+from kaagaz.ingestion.ports import Job
 from kaagaz.ingestion.service import UploadService
-from kaagaz.jobs.worker import Worker
+from kaagaz.jobs.worker import JobFailed, Worker
 from kaagaz.pipeline import DocumentProcessor
 from kaagaz.reading.csv_reader import CsvReader
 from kaagaz.reading.socket import ReaderSocket
@@ -40,6 +41,9 @@ class System:
     statuses: MemoryStatuses
     pieces: MemoryPieces
     storage: MemoryStorage
+    scanner: FakeScanner
+    repo: MemoryRepository
+    gate: ScanGate
 
 
 def build(verdict: Verdict = Verdict.CLEAN) -> System:
@@ -47,10 +51,13 @@ def build(verdict: Verdict = Verdict.CLEAN) -> System:
     queue = LeaseQueue(clock, lease_seconds=30, max_attempts=3)
     repo, storage, statuses, pieces = MemoryRepository(), MemoryStorage(), MemoryStatuses(), MemoryPieces()
     upload = UploadService(TEST_POLICY, repo, storage, queue, new_id=SeqIds())
-    gate = ScanGate(storage, FakeScanner(verdict), storage, statuses)
+    scanner = FakeScanner(verdict)
+    gate = ScanGate(storage, scanner, storage, statuses)
     socket = ReaderSocket({sniff.TEXT: CsvReader(max_cells=10_000)})
     processor = DocumentProcessor(gate, statuses, repo, socket, FakeMasker(), pieces)
-    return System(upload, Worker(queue, processor), processor, queue, clock, statuses, pieces, storage)
+    return System(
+        upload, Worker(queue, processor), processor, queue, clock, statuses, pieces, storage, scanner, repo, gate
+    )
 
 
 class PipelineTest(unittest.TestCase):
@@ -118,6 +125,44 @@ class PipelineTest(unittest.TestCase):
         system.storage.put(CUSTOMER, doc, io.BytesIO(b"swapped,content\n"))
         system.worker.run_once()
         self.assertEqual([f.code for f in system.queue.failed.values()], ["content_changed"])
+        self.assertEqual(system.pieces.for_document(CUSTOMER, doc), [])
+
+    def test_file_without_a_record_is_never_read_or_scanned(self) -> None:
+        system = build()
+        system.storage.put(CUSTOMER, "orphan", io.BytesIO(CSV))  # a file, no record
+        with self.assertRaises(JobFailed) as ctx:
+            system.processor(Job(CUSTOMER, "orphan"), lambda: None)
+        self.assertEqual(ctx.exception.code, "document_missing")
+        self.assertEqual(system.scanner.scanned, [])
+
+    def test_document_rejected_during_processing_writes_no_pieces(self) -> None:
+        system = build()
+        doc = system.upload.accept(CUSTOMER, io.BytesIO(CSV)).document_id
+
+        class RejectingMasker(FakeMasker):
+            # Simulates an overlapping delivery rejecting the file mid-run.
+            def mask(self, text: str) -> str:
+                system.statuses.set_status(CUSTOMER, doc, DocumentStatus.REJECTED)
+                return super().mask(text)
+
+        processor = DocumentProcessor(
+            system.gate, system.statuses, system.repo,
+            ReaderSocket({sniff.TEXT: CsvReader(max_cells=100)}), RejectingMasker(), system.pieces,
+        )
+        with self.assertRaises(JobFailed) as ctx:
+            processor(Job(CUSTOMER, doc), lambda: None)
+        self.assertEqual(ctx.exception.code, "not_scanned")
+        self.assertEqual(system.pieces.for_document(CUSTOMER, doc), [])
+
+    def test_a_later_rejection_removes_pieces_from_an_earlier_clean_run(self) -> None:
+        system = build()
+        doc = system.upload.accept(CUSTOMER, io.BytesIO(CSV)).document_id
+        system.worker.run_once()
+        self.assertEqual(len(system.pieces.for_document(CUSTOMER, doc)), 3)
+
+        system.scanner.verdict = Verdict.INFECTED  # new signatures on a rerun
+        with self.assertRaises(JobFailed):
+            system.processor(Job(CUSTOMER, doc), lambda: None)
         self.assertEqual(system.pieces.for_document(CUSTOMER, doc), [])
 
     def test_rejected_document_is_never_rescanned_or_read(self) -> None:

@@ -12,7 +12,8 @@ row and column structure is kept.
 * A quoted field may span several lines; its row is the record number, not
   the line number, so positions stay right.
 * Every field counts toward ``max_cells``, empty ones too, so a line of a
-  million commas is refused instead of filling memory.
+  million commas is refused. (The csv module builds each record before it can
+  be counted, so memory is bounded by the upload size, not avoided.)
 * Errors are raised outside the ``except`` block, so the original error
   (which can hold the file's bytes or quote a cell) is never chained on.
 
@@ -22,13 +23,10 @@ decoded at once; it is bounded by the upload size limit.
 
 import csv
 import io
-import re
 from collections.abc import Iterator
 
+from kaagaz.ingestion.sniff import FORBIDDEN_CONTROL
 from kaagaz.reading.spans import CellLocation, ReadError, Span
-
-# Same rule as the upload type check (ingestion/sniff.py).
-_FORBIDDEN_CONTROL = re.compile(r"[\x00-\x08\x0b\x0e-\x1f\x7f]")
 
 
 class CsvReader:
@@ -42,7 +40,7 @@ class CsvReader:
         text = _decode_utf8(data)
         if text is None:
             raise ReadError("not_utf8")
-        if _FORBIDDEN_CONTROL.search(text):
+        if FORBIDDEN_CONTROL.search(data):  # same rule as the upload type check
             raise ReadError("not_text")
 
         # newline="" lets the csv module see line endings inside quotes.
@@ -53,7 +51,8 @@ class CsvReader:
             for row_number, record in enumerate(records, start=1):
                 fields += len(record)
                 if fields > self._max_cells:
-                    break
+                    # In the try body, not an except block: nothing is chained.
+                    raise ReadError("too_many_cells")
                 for column_number, raw in enumerate(record, start=1):
                     cleaned = raw.strip()
                     if cleaned:  # nothing to point at in an empty cell
@@ -66,8 +65,6 @@ class CsvReader:
             malformed = True
         if malformed:
             raise ReadError("malformed_csv")
-        if fields > self._max_cells:
-            raise ReadError("too_many_cells")
 
 
 def _decode_utf8(data: bytes) -> str | None:

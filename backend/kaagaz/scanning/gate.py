@@ -42,7 +42,9 @@ class Verdict(Enum):
 class DocumentStatus(Enum):
     """PROVISIONAL: the stored status model is database design (#1)."""
 
-    RECEIVED = "received"  # uploaded, not scanned yet
+    # Not scanned yet. Upload does not write statuses yet, so a new document
+    # has none (None), which the gate treats the same. Ask Vrushit (#1).
+    RECEIVED = "received"
     CLEAN = "clean"  # passed the scan
     REJECTED = "rejected"  # failed the scan, quarantined
     NEEDS_READER = "needs_reader"  # clean, but no reader for its type yet (set by the pipeline)
@@ -68,6 +70,10 @@ class StatusStore(Protocol):
 
     def set_status(self, customer_id: str, document_id: str, status: DocumentStatus) -> None: ...
 
+
+# Codes that mean the file failed the scan (now or earlier). Anything made
+# from such a file must be removed.
+REJECTION_CODES = frozenset({"virus_found", "unscannable", "rejected"})
 
 # What the customer sees for each rejection. No scanner names or details.
 # Read by the file list screen (#22) once it exists.
@@ -95,16 +101,16 @@ class ScanGate:
         customer_id, document_id = job.customer_id, job.document_id
         if self._statuses.get_status(customer_id, document_id) is DocumentStatus.REJECTED:
             raise JobFailed("rejected", retryable=False)
-        try:
-            data = self._storage.get(customer_id, document_id)
-        except BlobNotFound:
+        # Errors are raised outside the except blocks, so an adapter's error
+        # (which could hold scanner output or a path) is never chained on.
+        data = _get_or_none(self._storage, customer_id, document_id)
+        if data is None:
             # Includes a job naming another customer's document: nothing read.
-            raise JobFailed("document_missing", retryable=False) from None
+            raise JobFailed("document_missing", retryable=False)
 
-        try:
-            verdict = self._scanner.scan(data)
-        except ScannerError:
-            raise JobFailed("scanner_unavailable", retryable=True) from None
+        verdict = _scan(self._scanner, data)
+        if verdict is _SCANNER_FAILED:
+            raise JobFailed("scanner_unavailable", retryable=True)
 
         if verdict is Verdict.CLEAN:
             self._statuses.set_status(customer_id, document_id, DocumentStatus.CLEAN)
@@ -116,6 +122,26 @@ class ScanGate:
         self._statuses.set_status(customer_id, document_id, DocumentStatus.REJECTED)
         self._quarantine.quarantine(customer_id, document_id)
         raise JobFailed(code, retryable=False)
+
+
+def _get_or_none(storage: BlobStorage, customer_id: str, document_id: str) -> bytes | None:
+    try:
+        return storage.get(customer_id, document_id)
+    except BlobNotFound:
+        return None
+
+
+# Marks "the scanner gave no answer". A dedicated object, not None, so a
+# scanner that wrongly returns None is still treated as unscannable.
+_SCANNER_FAILED = object()
+
+
+def _scan(scanner: Scanner, data: bytes) -> object:
+    """The scanner's answer, or _SCANNER_FAILED if it could not give one."""
+    try:
+        return scanner.scan(data)
+    except ScannerError:
+        return _SCANNER_FAILED
 
 
 def require_clean(statuses: StatusStore, job: Job) -> None:

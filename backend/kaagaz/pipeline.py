@@ -10,11 +10,13 @@ The steps, in order, for one (customer, document):
 4. Read them through the reader socket. A type with no reader yet (scans and
    photos in Sprint 1) is marked "needs a reader" and the job ends normally.
 5. Mask identity numbers in every span, text and raw value, before anything
-   is kept (CLAUDE.md never-do 3).
+   is kept (CLAUDE.md never-do 3). Pieces keep the masked text only; where the
+   raw reader output is stored is database design (#1), so it is not kept yet.
 6. Split the text into pieces, one per row, and save them. Mark it ready.
 
 Running the same job twice is safe: pieces are replaced, never appended, so a
 redelivered job cannot create duplicate pieces (queues deliver at least once).
+If a later scan rejects the file, its pieces are removed.
 
 PROVISIONAL: file preparation (#17) and page pictures (#18) belong between
 steps 3 and 4. They wait for approved libraries. The masking rule is
@@ -30,7 +32,13 @@ from kaagaz.ingestion.ports import DocumentRepository, Job
 from kaagaz.jobs.worker import Heartbeat, JobFailed
 from kaagaz.reading.socket import NoReader, ReaderSocket
 from kaagaz.reading.spans import ReadError, Span
-from kaagaz.scanning.gate import DocumentStatus, ScanGate, StatusStore, require_clean
+from kaagaz.scanning.gate import (
+    REJECTION_CODES,
+    DocumentStatus,
+    ScanGate,
+    StatusStore,
+    require_clean,
+)
 
 
 class PieceStore(Protocol):
@@ -67,7 +75,14 @@ class DocumentProcessor:
         if record is None:
             raise JobFailed("document_missing", retryable=False)
 
-        data = self._gate.check(job)
+        try:
+            data = self._gate.check(job)
+        except JobFailed as failure:
+            if failure.code in REJECTION_CODES:
+                # A file rejected on a later scan (new signatures) must not
+                # leave pieces from an earlier clean run behind.
+                self._pieces.replace(job.customer_id, job.document_id, [])
+            raise
         if hashlib.sha256(data).hexdigest() != record.sha256:
             raise JobFailed("content_changed", retryable=False)
         heartbeat()
@@ -76,6 +91,7 @@ class DocumentProcessor:
         try:
             spans = self._socket.read(record.detected_type, data)
         except NoReader:
+            require_clean(self._statuses, job)
             self._statuses.set_status(job.customer_id, job.document_id, DocumentStatus.NEEDS_READER)
             return
         except ReadError as error:

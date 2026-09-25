@@ -106,16 +106,17 @@ class ScanGateTest(unittest.TestCase):
 
 class RequireCleanTest(unittest.TestCase):
     def test_only_clean_documents_pass(self) -> None:
-        statuses = MemoryStatuses()
         for status in (None, DocumentStatus.RECEIVED, DocumentStatus.REJECTED):
             with self.subTest(status=status):
+                statuses = MemoryStatuses()  # fresh: REJECTED is final in the store
                 if status is not None:
                     statuses.set_status(CUSTOMER, DOC, status)
                 with self.assertRaises(JobFailed) as ctx:
                     require_clean(statuses, JOB)
                 self.assertEqual(ctx.exception.code, "not_scanned")
-        statuses.set_status(CUSTOMER, DOC, DocumentStatus.CLEAN)
-        require_clean(statuses, JOB)  # does not raise
+        clean = MemoryStatuses()
+        clean.set_status(CUSTOMER, DOC, DocumentStatus.CLEAN)
+        require_clean(clean, JOB)  # does not raise
 
 
 class GateInWorkerTest(unittest.TestCase):
