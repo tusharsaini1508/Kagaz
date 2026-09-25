@@ -32,9 +32,11 @@ class Verdict(Enum):
 
 
 class DocumentStatus(Enum):
-    RECEIVED = "received"
-    CLEAN = "clean"
-    REJECTED = "rejected"
+    RECEIVED = "received"  # uploaded, not scanned yet
+    CLEAN = "clean"  # passed the scan
+    REJECTED = "rejected"  # failed the scan, quarantined
+    NEEDS_READER = "needs_reader"  # clean, but no reader for its type yet (set by the pipeline)
+    READY = "ready"  # read and split into pieces (set by the pipeline)
 
 
 class ScannerError(Exception):

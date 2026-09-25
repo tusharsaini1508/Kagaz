@@ -8,6 +8,7 @@ used by product code.
 import threading
 from typing import Any, BinaryIO
 
+from kaagaz.chunking.rows import Piece
 from kaagaz.ingestion.errors import BackendUnavailable
 from kaagaz.ingestion.ports import BlobNotFound, DocumentRecord, Job
 from kaagaz.scanning.gate import DocumentStatus, ScannerError
@@ -22,8 +23,13 @@ class MemoryRepository:
 
     def __init__(self) -> None:
         self._by_fingerprint: dict[tuple[str, str], DocumentRecord] = {}
+        self._by_id: dict[tuple[str, str], DocumentRecord] = {}
         self._lock = threading.Lock()
         self.fail_add = False
+
+    def get(self, customer_id: str, document_id: str) -> DocumentRecord | None:
+        with self._lock:
+            return self._by_id.get((customer_id, document_id))
 
     def find_by_fingerprint(self, customer_id: str, sha256: str) -> DocumentRecord | None:
         with self._lock:
@@ -38,6 +44,7 @@ class MemoryRepository:
             if existing is not None:
                 return existing, False
             self._by_fingerprint[key] = record
+            self._by_id[(record.customer_id, record.document_id)] = record
             return record, True
 
     def remove(self, record: DocumentRecord) -> None:
@@ -46,6 +53,7 @@ class MemoryRepository:
             stored = self._by_fingerprint.get(key)
             if stored is not None and stored.document_id == record.document_id:
                 del self._by_fingerprint[key]
+                del self._by_id[(record.customer_id, record.document_id)]
 
     def records_for(self, customer_id: str) -> list[DocumentRecord]:
         with self._lock:
@@ -132,3 +140,17 @@ class MemoryQueue:
         if self.fail_enqueue:
             raise BackendUnavailable("queue down")
         self.jobs.append(job)
+
+
+class MemoryPieces:
+    """Pieces keyed by (customer_id, document_id). replace() swaps the whole
+    list, so running a job twice never duplicates pieces."""
+
+    def __init__(self) -> None:
+        self._pieces: dict[tuple[str, str], list[Piece]] = {}
+
+    def replace(self, customer_id: str, document_id: str, pieces: list[Piece]) -> None:
+        self._pieces[(customer_id, document_id)] = list(pieces)
+
+    def for_document(self, customer_id: str, document_id: str) -> list[Piece]:
+        return list(self._pieces.get((customer_id, document_id), []))

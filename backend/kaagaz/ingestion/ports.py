@@ -45,6 +45,11 @@ class BlobNotFound(Exception):
 
 
 class DocumentRepository(Protocol):
+    def get(self, customer_id: str, document_id: str) -> DocumentRecord | None:
+        """This customer's document with this id, or None (also for another
+        customer's id)."""
+        ...
+
     def find_by_fingerprint(self, customer_id: str, sha256: str) -> DocumentRecord | None:
         """This customer's document with this fingerprint, if any."""
         ...
