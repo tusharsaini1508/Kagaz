@@ -6,10 +6,11 @@ used by product code.
 """
 
 import threading
-from typing import BinaryIO
+from typing import Any, BinaryIO
 
 from kaagaz.ingestion.errors import BackendUnavailable
 from kaagaz.ingestion.ports import BlobNotFound, DocumentRecord, Job
+from kaagaz.scanning.gate import DocumentStatus, ScannerError
 
 
 class MemoryRepository:
@@ -57,6 +58,7 @@ class MemoryStorage:
 
     def __init__(self) -> None:
         self._blobs: dict[tuple[str, str], bytes] = {}
+        self.quarantined: dict[tuple[str, str], bytes] = {}
         self._lock = threading.Lock()
         self.fail_put = False
 
@@ -81,6 +83,42 @@ class MemoryStorage:
     def count(self) -> int:
         with self._lock:
             return len(self._blobs)
+
+    # Quarantine port (kaagaz.scanning.gate.Quarantine): the file moves to a
+    # separate dict that get() never reads.
+    def quarantine(self, customer_id: str, document_id: str) -> None:
+        with self._lock:
+            content = self._blobs.pop((customer_id, document_id), None)
+            if content is not None:
+                self.quarantined[(customer_id, document_id)] = content
+
+
+class MemoryStatuses:
+    """Document status keyed by (customer_id, document_id)."""
+
+    def __init__(self) -> None:
+        self._statuses: dict[tuple[str, str], DocumentStatus] = {}
+
+    def get_status(self, customer_id: str, document_id: str) -> DocumentStatus | None:
+        return self._statuses.get((customer_id, document_id))
+
+    def set_status(self, customer_id: str, document_id: str, status: DocumentStatus) -> None:
+        self._statuses[(customer_id, document_id)] = status
+
+
+class FakeScanner:
+    """Returns a preset verdict, or raises ScannerError. Records what it saw."""
+
+    def __init__(self, verdict: object = None, *, error: bool = False) -> None:
+        self._verdict = verdict
+        self._error = error
+        self.scanned: list[bytes] = []
+
+    def scan(self, data: bytes) -> Any:
+        self.scanned.append(data)
+        if self._error:
+            raise ScannerError("scanner down")
+        return self._verdict
 
 
 class MemoryQueue:
