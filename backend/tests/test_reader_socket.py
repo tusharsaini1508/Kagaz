@@ -7,7 +7,7 @@ from typing import cast
 from kaagaz.ingestion import sniff
 from kaagaz.reading.csv_reader import CsvReader
 from kaagaz.reading.socket import NoReader, ReaderSocket
-from kaagaz.reading.spans import CellLocation, Span
+from kaagaz.reading.spans import CellLocation, ReadError, Span
 
 PACKAGE_ROOT = pathlib.Path(__file__).resolve().parent.parent / "kaagaz"
 
@@ -32,13 +32,24 @@ class ReaderSocketTest(unittest.TestCase):
         socket = ReaderSocket({sniff.TEXT: CsvReader(max_cells=100), "fake": OneCellReader()})
         self.assertEqual([s.text for s in socket.read("fake", b"")], ["hello"])
 
-    def test_span_without_a_location_is_refused(self) -> None:
-        class BadReader:
-            def read(self, data: bytes) -> list[Span]:
-                return [Span("text", "text", cast(CellLocation, None))]
+    def test_invalid_spans_are_refused_for_good(self) -> None:
+        bad_spans = {
+            "no location": Span("text", "text", cast(CellLocation, None)),
+            "row zero": Span("text", "text", CellLocation(1, 0, 1)),
+            "empty text": Span("", "", CellLocation(1, 1, 1)),
+        }
+        for name, bad in bad_spans.items():
 
-        with self.assertRaises(TypeError):
-            ReaderSocket({"bad": BadReader()}).read("bad", b"")
+            class BadReader:
+                def __init__(self, span: Span) -> None:
+                    self._span = span
+
+                def read(self, data: bytes) -> list[Span]:
+                    return [self._span]
+
+            with self.subTest(name), self.assertRaises(ReadError) as ctx:
+                ReaderSocket({"bad": BadReader(bad)}).read("bad", b"")
+            self.assertEqual(ctx.exception.code, "invalid_reader_output")
 
     def test_later_changes_to_the_mapping_do_not_change_the_socket(self) -> None:
         readers = {sniff.TEXT: CsvReader(max_cells=100)}
@@ -50,21 +61,36 @@ class ReaderSocketTest(unittest.TestCase):
 class NoDirectReaderCallsTest(unittest.TestCase):
     """CLAUDE.md: application code never calls a reader directly."""
 
-    READER_MODULES = {"kaagaz.reading.csv_reader"}
+    # Every module in kaagaz/reading is a reader, except the socket and the
+    # span types, which everyone may use. New readers are covered automatically.
+    ALLOWED = {"__init__", "socket", "spans"}
+
+    def reader_modules(self) -> set[str]:
+        return {
+            f"kaagaz.reading.{path.stem}"
+            for path in (PACKAGE_ROOT / "reading").glob("*.py")
+            if path.stem not in self.ALLOWED
+        }
+
+    def test_the_rule_knows_the_csv_reader(self) -> None:
+        self.assertIn("kaagaz.reading.csv_reader", self.reader_modules())
 
     def test_only_the_reading_package_imports_reader_modules(self) -> None:
+        forbidden = self.reader_modules()
         offenders = []
         for path in PACKAGE_ROOT.rglob("*.py"):
             if "reading" in path.relative_to(PACKAGE_ROOT).parts:
                 continue
             tree = ast.parse(path.read_text(encoding="utf-8"))
             for node in ast.walk(tree):
-                names = []
+                names: list[str] = []
                 if isinstance(node, ast.Import):
                     names = [alias.name for alias in node.names]
                 elif isinstance(node, ast.ImportFrom) and node.module:
-                    names = [node.module]
-                if any(name in self.READER_MODULES for name in names):
+                    # Covers both "from kaagaz.reading.csv_reader import X"
+                    # and "from kaagaz.reading import csv_reader".
+                    names = [node.module] + [f"{node.module}.{alias.name}" for alias in node.names]
+                if any(name in forbidden for name in names):
                     offenders.append(str(path.relative_to(PACKAGE_ROOT)))
         self.assertEqual(offenders, [])
 

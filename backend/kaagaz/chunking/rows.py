@@ -11,8 +11,10 @@ column letter instead, for example "A: INV-1 | B: 100".
 PROVISIONAL: the piece shape waits for the database design (#1) and the
 reader contract (#3). Text blocks for PDFs come with the first PDF reader.
 
-Time is O(n + r log r) for n spans in r rows: one pass to group, then a sort
-of the row keys.
+Time is O(n log n) in the worst case for n spans: one pass to group them by
+row, a sort of the row keys, and a sort of each row's cells by column (one
+very wide row costs O(n log n)). Readers already give cells in order, so in
+practice the sorts are cheap.
 """
 
 from collections.abc import Iterable

@@ -15,7 +15,14 @@ from kaagaz.pipeline import DocumentProcessor
 from kaagaz.reading.csv_reader import CsvReader
 from kaagaz.reading.socket import ReaderSocket
 from kaagaz.scanning.gate import DocumentStatus, ScanGate, Verdict
-from tests.fakes import FakeScanner, MemoryPieces, MemoryRepository, MemoryStatuses, MemoryStorage
+from tests.fakes import (
+    FakeMasker,
+    FakeScanner,
+    MemoryPieces,
+    MemoryRepository,
+    MemoryStatuses,
+    MemoryStorage,
+)
 from tests.lease_queue import FakeClock, LeaseQueue
 from tests.support import PDF_BYTES, TEST_POLICY, SeqIds
 
@@ -42,7 +49,7 @@ def build(verdict: Verdict = Verdict.CLEAN) -> System:
     upload = UploadService(TEST_POLICY, repo, storage, queue, new_id=SeqIds())
     gate = ScanGate(storage, FakeScanner(verdict), storage, statuses)
     socket = ReaderSocket({sniff.TEXT: CsvReader(max_cells=10_000)})
-    processor = DocumentProcessor(gate, statuses, repo, storage, socket, pieces)
+    processor = DocumentProcessor(gate, statuses, repo, socket, FakeMasker(), pieces)
     return System(upload, Worker(queue, processor), processor, queue, clock, statuses, pieces, storage)
 
 
@@ -96,6 +103,30 @@ class PipelineTest(unittest.TestCase):
         system.processor(delivery.job, lambda: None)
         system.processor(delivery.job, lambda: None)  # a redelivery
         self.assertEqual(len(system.pieces.for_document(CUSTOMER, doc)), 3)
+
+    def test_identity_numbers_are_masked_in_pieces_before_they_are_saved(self) -> None:
+        system = build()
+        doc = system.upload.accept(CUSTOMER, io.BytesIO(b"name,id\nAsha,SECRET\n")).document_id
+        system.worker.run_once()
+        texts = [p.text for p in system.pieces.for_document(CUSTOMER, doc)]
+        self.assertEqual(texts, ["A: name | B: id", "A: Asha | B: ******"])
+        self.assertFalse(any(FakeMasker.MARKER in t for t in texts))
+
+    def test_file_changed_after_upload_is_refused(self) -> None:
+        system = build()
+        doc = system.upload.accept(CUSTOMER, io.BytesIO(CSV)).document_id
+        system.storage.put(CUSTOMER, doc, io.BytesIO(b"swapped,content\n"))
+        system.worker.run_once()
+        self.assertEqual([f.code for f in system.queue.failed.values()], ["content_changed"])
+        self.assertEqual(system.pieces.for_document(CUSTOMER, doc), [])
+
+    def test_rejected_document_is_never_rescanned_or_read(self) -> None:
+        system = build()
+        doc = system.upload.accept(CUSTOMER, io.BytesIO(CSV)).document_id
+        system.statuses.set_status(CUSTOMER, doc, DocumentStatus.REJECTED)
+        system.worker.run_once()
+        self.assertEqual([f.code for f in system.queue.failed.values()], ["rejected"])
+        self.assertEqual(system.pieces.for_document(CUSTOMER, doc), [])
 
 
 if __name__ == "__main__":

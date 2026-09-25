@@ -21,6 +21,18 @@ Each partial failure is undone in reverse order:
 * queueing fails: the record and the file are removed, so the customer can
   simply upload again. Without this undo, the retry would be reported as a
   duplicate of a document that is never processed.
+
+Every undo step runs even if an earlier one fails, and the original error is
+always the one raised; a failed undo step is added to it as a note.
+
+Known leftovers, when the undo itself cannot reach the backend: a record with
+no job, or a stored file with no record. Finding and fixing those later (an
+outbox, or re-queueing records that never ran) is database and queue design,
+so it is PROVISIONAL and Vrushit's (#1, #16). Also rare: a race loser is told
+"duplicate" of a winner that then fails to queue and is rolled back.
+
+PROVISIONAL: document ids are random UUID4 here; the id format belongs to the
+database design (#1).
 """
 
 import uuid
@@ -94,10 +106,16 @@ class UploadService:
             # Store the exact bytes that were hashed.
             self._storage.put(customer_id, record.document_id, spooled.file)
 
+        def delete_file() -> None:
+            self._storage.delete(customer_id, record.document_id)
+
+        def remove_record() -> None:
+            self._repository.remove(record)
+
         try:
             stored, created = self._repository.add_if_absent(record)
-        except BackendUnavailable:
-            self._storage.delete(customer_id, record.document_id)
+        except BackendUnavailable as error:
+            _undo(error, delete_file)
             raise
 
         if not created:
@@ -106,9 +124,22 @@ class UploadService:
 
         try:
             self._queue.enqueue(Job(customer_id=customer_id, document_id=record.document_id))
-        except BackendUnavailable:
-            self._repository.remove(record)
-            self._storage.delete(customer_id, record.document_id)
+        except BackendUnavailable as error:
+            _undo(error, remove_record, delete_file)
             raise
 
         return UploadResult(record.document_id, duplicate=False)
+
+
+def _undo(error: BackendUnavailable, *steps: Callable[[], None]) -> None:
+    """Run every undo step, even if one fails, without hiding ``error``.
+
+    A step that fails is recorded on ``error`` by name only, never with data.
+    Only BackendUnavailable is caught; any other exception is a bug and
+    propagates.
+    """
+    for step in steps:
+        try:
+            step()
+        except BackendUnavailable:
+            error.add_note(f"undo step failed: {step.__name__}")

@@ -184,6 +184,36 @@ class PartialFailureTest(unittest.TestCase):
         self.assertEqual(len(queue.jobs), 1)
 
 
+class FailedUndoTest(unittest.TestCase):
+    def test_queue_failure_still_deletes_the_file_when_removing_the_record_fails(self) -> None:
+        service, repo, storage, queue = make_service()
+        queue.fail_enqueue = True
+        repo.fail_remove = True
+        with self.assertRaises(BackendUnavailable) as ctx:
+            service.accept(CUSTOMER, io.BytesIO(PDF_BYTES))
+        self.assertEqual(str(ctx.exception), "queue down")  # the original error
+        self.assertIn("undo step failed: remove_record", ctx.exception.__notes__)
+        self.assertEqual(storage.count(), 0)
+
+    def test_database_failure_keeps_its_own_error_when_deleting_the_file_fails(self) -> None:
+        service, repo, storage, queue = make_service()
+        repo.fail_add = True
+        storage.fail_delete = True
+        with self.assertRaises(BackendUnavailable) as ctx:
+            service.accept(CUSTOMER, io.BytesIO(PDF_BYTES))
+        self.assertEqual(str(ctx.exception), "database down")
+        self.assertIn("undo step failed: delete_file", ctx.exception.__notes__)
+        self.assertEqual(queue.jobs, [])
+
+    def test_spooled_copy_is_closed_when_storing_fails(self) -> None:
+        service, _, storage, _ = make_service()
+        storage.fail_put = True
+        with self.assertRaises(BackendUnavailable):
+            service.accept(CUSTOMER, io.BytesIO(PDF_BYTES))
+        assert storage.last_put_stream is not None
+        self.assertTrue(storage.last_put_stream.closed)
+
+
 class PolicyTest(unittest.TestCase):
     def test_policy_refuses_bad_values(self) -> None:
         cases: tuple[dict[str, Any], ...] = (

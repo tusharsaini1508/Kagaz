@@ -2,6 +2,9 @@
 
 Deny by default: only an explicit ``Verdict.CLEAN`` lets a file through.
 
+* REJECTED is final: a rejected document is refused at once, never rescanned
+  (a rescan with different signatures must not be able to clear it).
+
 * CLEAN: the document is marked clean and later steps may open it.
 * INFECTED or UNSCANNABLE (for example encrypted, or too big for the
   scanner), or any value that is not a Verdict: the file is quarantined, the
@@ -9,8 +12,13 @@ Deny by default: only an explicit ``Verdict.CLEAN`` lets a file through.
 * The scanner is down or times out (ScannerError): the job fails but may be
   retried. The document stays unscanned, so no later step will open it.
 
-Later steps call ``require_clean`` before touching a file, so a file that was
-never scanned, or failed the scan, cannot be opened by mistake.
+``check`` returns the exact bytes it scanned. Callers read those bytes and
+never fetch the file again, so what is read is always what was scanned.
+Later steps call ``require_clean`` before writing results, so a file that was
+never scanned, or failed the scan, cannot be used by mistake.
+
+Adapter contract: status writes must be conditional in the real store (never
+move out of REJECTED), because two deliveries of one job can overlap.
 
 PROVISIONAL: which scanner, where the scan runs and where quarantined files
 go are open questions (PRD question 4). The scanner and quarantine are ports
@@ -32,6 +40,8 @@ class Verdict(Enum):
 
 
 class DocumentStatus(Enum):
+    """PROVISIONAL: the stored status model is database design (#1)."""
+
     RECEIVED = "received"  # uploaded, not scanned yet
     CLEAN = "clean"  # passed the scan
     REJECTED = "rejected"  # failed the scan, quarantined
@@ -60,6 +70,7 @@ class StatusStore(Protocol):
 
 
 # What the customer sees for each rejection. No scanner names or details.
+# Read by the file list screen (#22) once it exists.
 CUSTOMER_MESSAGES = {
     "virus_found": "This file failed the virus check and was not processed.",
     "unscannable": "This file could not be checked for viruses, so it was not processed.",
@@ -79,9 +90,11 @@ class ScanGate:
         self._quarantine = quarantine
         self._statuses = statuses
 
-    def check(self, job: Job) -> None:
-        """Scan the job's file. Returns only if it is clean."""
+    def check(self, job: Job) -> bytes:
+        """Scan the job's file and return the scanned bytes, only if clean."""
         customer_id, document_id = job.customer_id, job.document_id
+        if self._statuses.get_status(customer_id, document_id) is DocumentStatus.REJECTED:
+            raise JobFailed("rejected", retryable=False)
         try:
             data = self._storage.get(customer_id, document_id)
         except BlobNotFound:
@@ -95,11 +108,13 @@ class ScanGate:
 
         if verdict is Verdict.CLEAN:
             self._statuses.set_status(customer_id, document_id, DocumentStatus.CLEAN)
-            return
+            return data
 
         code = "virus_found" if verdict is Verdict.INFECTED else "unscannable"
-        self._quarantine.quarantine(customer_id, document_id)
+        # Refuse first: if moving the file to quarantine fails, it is already
+        # marked rejected and no step will use it.
         self._statuses.set_status(customer_id, document_id, DocumentStatus.REJECTED)
+        self._quarantine.quarantine(customer_id, document_id)
         raise JobFailed(code, retryable=False)
 
 

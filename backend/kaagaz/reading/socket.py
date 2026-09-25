@@ -19,7 +19,7 @@ PROVISIONAL until the reader contract (#3) is written.
 from collections.abc import Iterable, Mapping
 from typing import Protocol
 
-from kaagaz.reading.spans import CellLocation, Span
+from kaagaz.reading.spans import CellLocation, ReadError, Span
 
 
 class Reader(Protocol):
@@ -41,14 +41,27 @@ class ReaderSocket:
     def read(self, detected_type: str, data: bytes) -> list[Span]:
         """All spans of the document, or ReadError / NoReader.
 
-        The socket checks every span has a location and text, so no reader
-        can hand back a value that cannot be pointed at.
+        The socket checks every span has a real cell location and non-empty
+        text, so no reader can hand back a value that cannot be pointed at.
+        A reader that breaks this is a bug in that reader; it fails with
+        ``invalid_reader_output`` for good rather than being retried.
         """
         reader = self._readers.get(detected_type)  # O(1) dispatch
         if reader is None:
             raise NoReader(detected_type)
         spans = list(reader.read(data))
         for span in spans:
-            if not isinstance(span.location, CellLocation) or not isinstance(span.text, str):
-                raise TypeError("reader returned a span without a valid location")
+            if not _is_valid(span):
+                raise ReadError("invalid_reader_output")
         return spans
+
+
+def _is_valid(span: Span) -> bool:
+    location = span.location
+    return (
+        isinstance(location, CellLocation)
+        and min(location.sheet, location.row, location.column) >= 1
+        and isinstance(span.text, str)
+        and bool(span.text)
+        and isinstance(span.raw, str)
+    )

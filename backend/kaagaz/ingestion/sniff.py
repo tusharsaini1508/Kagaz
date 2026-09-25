@@ -6,8 +6,14 @@ compared. Nothing inside the file is parsed here: the virus scan (#15) must
 run before any step opens a file, so telling an .xlsx from a .docx (both are
 zip files) waits until after the scan.
 
-Time is O(1): a fixed number of prefix comparisons plus one bounded decode of
-the head for the text check.
+Time is O(len(head)): a fixed number of prefix comparisons plus one scan and
+one decode of the head for the text check. Callers pass at most HEAD_SIZE
+(4 KiB) bytes, so in practice it is a small constant.
+
+PROVISIONAL: every UTF-8 text file is tagged TEXT, and the only text reader so
+far is the CSV reader, so a .txt, JSON or HTML file would be read as CSV.
+Telling CSV from other text (after the scan) is an open question for Vrushit;
+until then markup could reach pieces, which must be fixed before real use.
 """
 
 import codecs

@@ -38,6 +38,50 @@ class ReadLimitedTest(unittest.TestCase):
         with read_limited(io.BytesIO(data), max_bytes=len(data)) as spooled:
             self.assertEqual(spooled.head, data[:HEAD_SIZE])
 
+    def test_head_is_collected_across_many_small_chunks(self) -> None:
+        data = bytes(range(256)) * 20
+        with read_limited(io.BytesIO(data), max_bytes=len(data), chunk_size=7) as spooled:
+            self.assertEqual(spooled.head, data[:HEAD_SIZE])
+            self.assertEqual(spooled.file.read(), data)
+
+    def test_stream_that_returns_fewer_bytes_than_asked_is_read_fully(self) -> None:
+        class Trickle(io.RawIOBase):
+            def __init__(self, data: bytes) -> None:
+                self._inner = io.BytesIO(data)
+
+            def readable(self) -> bool:
+                return True
+
+            def read(self, size: int = -1) -> bytes:
+                return self._inner.read(min(size, 3) if size > 0 else 3)
+
+        data = b"0123456789" * 50
+        with read_limited(Trickle(data), max_bytes=1000) as spooled:
+            self.assertEqual(spooled.size, len(data))
+            self.assertEqual(spooled.sha256, hashlib.sha256(data).hexdigest())
+
+    def test_stream_returning_none_is_refused_not_treated_as_the_end(self) -> None:
+        class NonBlocking(io.RawIOBase):
+            def readable(self) -> bool:
+                return True
+
+            def read(self, size: int = -1) -> None:
+                return None
+
+        with self.assertRaises(ValueError):
+            read_limited(NonBlocking(), max_bytes=100)
+
+    def test_stream_returning_more_than_asked_is_refused(self) -> None:
+        class Greedy(io.RawIOBase):
+            def readable(self) -> bool:
+                return True
+
+            def read(self, size: int = -1) -> bytes:
+                return b"x" * (size + 10)
+
+        with self.assertRaises(ValueError):
+            read_limited(Greedy(), max_bytes=100, chunk_size=8)
+
     def test_exactly_max_bytes_is_accepted(self) -> None:
         with read_limited(io.BytesIO(b"a" * 100), max_bytes=100) as spooled:
             self.assertEqual(spooled.size, 100)

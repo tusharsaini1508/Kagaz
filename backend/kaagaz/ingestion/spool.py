@@ -7,6 +7,10 @@ One pass over the stream does three jobs at the same time:
 * copies the bytes into a spooled temporary file, which lives in memory
   while small and moves to disk when large.
 
+The stream must be a blocking stream (a request body or a file) that honours
+``read(n)``: a read that returns None, or more than ``n`` bytes, means the
+stream is broken and is refused.
+
 Time is O(n) in the bytes read, and never more than ``max_bytes + 1`` bytes
 are read, so an oversized upload costs at most one byte past the limit.
 Extra memory is O(chunk_size + spool_memory_bytes) whatever the file size.
@@ -74,6 +78,10 @@ def read_limited(
             # byte arrives, the file is too large and we stop reading.
             want = min(chunk_size, max_bytes + 1 - size)
             chunk = stream.read(want)
+            if chunk is None:
+                raise ValueError("stream returned no data without ending (non-blocking?)")
+            if len(chunk) > want:
+                raise ValueError("stream returned more bytes than asked for")
             if not chunk:
                 break
             size += len(chunk)

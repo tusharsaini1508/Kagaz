@@ -159,6 +159,42 @@ class WorkerTest(unittest.TestCase):
         self.assertEqual(seen_by_other_worker, [])
         self.assertEqual(queue.pending(), 0)
 
+    def test_heartbeat_after_the_lease_is_lost_does_not_crash_the_worker(self) -> None:
+        clock, queue = make_queue()
+        queue.enqueue(GOOD)
+
+        def too_slow(job: Job, beat: Heartbeat) -> None:
+            clock.advance(LEASE + 1)
+            beat()  # the lease is gone: LeaseLost inside the handler
+
+        self.assertTrue(Worker(queue, too_slow).run_once())
+        again = queue.receive()  # the job is still there for the next delivery
+        assert again is not None
+        self.assertEqual(again.attempt, 2)
+
+    def test_ack_after_the_lease_is_lost_leaves_the_job_for_the_new_holder(self) -> None:
+        clock, queue = make_queue()
+        queue.enqueue(GOOD)
+
+        def slow_but_no_heartbeat(job: Job, beat: Heartbeat) -> None:
+            clock.advance(LEASE + 1)
+
+        self.assertTrue(Worker(queue, slow_but_no_heartbeat).run_once())
+        self.assertEqual(queue.pending(), 1)
+        self.assertEqual(queue.failed, {})
+
+    def test_bury_after_the_lease_is_lost_does_not_crash_the_worker(self) -> None:
+        clock, queue = make_queue()
+        queue.enqueue(POISON)
+
+        def slow_permanent_failure(job: Job, beat: Heartbeat) -> None:
+            clock.advance(LEASE + 1)
+            raise JobFailed("broken_file", retryable=False)
+
+        self.assertTrue(Worker(queue, slow_permanent_failure).run_once())
+        self.assertEqual(queue.failed, {})  # the next delivery decides
+        self.assertEqual(queue.pending(), 1)
+
     def test_unexpected_error_propagates_and_the_job_comes_back(self) -> None:
         clock, queue = make_queue()
         queue.enqueue(GOOD)

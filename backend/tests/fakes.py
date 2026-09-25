@@ -26,6 +26,7 @@ class MemoryRepository:
         self._by_id: dict[tuple[str, str], DocumentRecord] = {}
         self._lock = threading.Lock()
         self.fail_add = False
+        self.fail_remove = False
 
     def get(self, customer_id: str, document_id: str) -> DocumentRecord | None:
         with self._lock:
@@ -48,6 +49,8 @@ class MemoryRepository:
             return record, True
 
     def remove(self, record: DocumentRecord) -> None:
+        if self.fail_remove:
+            raise BackendUnavailable("database down")
         key = (record.customer_id, record.sha256)
         with self._lock:
             stored = self._by_fingerprint.get(key)
@@ -69,8 +72,11 @@ class MemoryStorage:
         self.quarantined: dict[tuple[str, str], bytes] = {}
         self._lock = threading.Lock()
         self.fail_put = False
+        self.fail_delete = False
+        self.last_put_stream: BinaryIO | None = None
 
     def put(self, customer_id: str, document_id: str, data: BinaryIO) -> None:
+        self.last_put_stream = data
         if self.fail_put:
             raise BackendUnavailable("storage down")
         content = data.read()
@@ -85,6 +91,8 @@ class MemoryStorage:
                 raise BlobNotFound(document_id) from None
 
     def delete(self, customer_id: str, document_id: str) -> None:
+        if self.fail_delete:
+            raise BackendUnavailable("storage down")
         with self._lock:
             self._blobs.pop((customer_id, document_id), None)
 
@@ -154,3 +162,17 @@ class MemoryPieces:
 
     def for_document(self, customer_id: str, document_id: str) -> list[Piece]:
         return list(self._pieces.get((customer_id, document_id), []))
+
+
+class FakeMasker:
+    """Stands in for the real masking rule (PRD question 1, Vrushit's).
+
+    Masks the made-up marker word ``SECRET`` so tests can prove masking runs
+    on every value before it is stored. It knows nothing about real Aadhaar
+    or PAN formats, and must never be used outside tests.
+    """
+
+    MARKER = "SECRET"
+
+    def mask(self, text: str) -> str:
+        return text.replace(self.MARKER, "*" * len(self.MARKER))

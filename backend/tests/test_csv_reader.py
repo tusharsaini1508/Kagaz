@@ -60,10 +60,26 @@ class CsvReaderTest(unittest.TestCase):
         with self.assertRaises(ReadError) as ctx:
             read(b'a,"never closed\n')
         self.assertEqual(str(ctx.exception), "malformed_csv")
-        # Raised "from None": the csv module's message (which can quote the
-        # cell) is not chained onto our error.
+        # Raised outside the except block: the csv module's error (which can
+        # quote the cell) is not chained onto ours at all.
         self.assertIsNone(ctx.exception.__cause__)
-        self.assertTrue(ctx.exception.__suppress_context__)
+        self.assertIsNone(ctx.exception.__context__)
+
+    def test_non_utf8_error_does_not_carry_the_file(self) -> None:
+        with self.assertRaises(ReadError) as ctx:
+            read(b"made-up secret \xff")
+        self.assertIsNone(ctx.exception.__context__)
+
+    def test_control_characters_anywhere_in_the_file_are_refused(self) -> None:
+        for data in (b"a,b\nc,\x00d\n", b"a" * 5000 + b"\x1b"):
+            with self.subTest(size=len(data)), self.assertRaises(ReadError) as ctx:
+                read(data)
+            self.assertEqual(ctx.exception.code, "not_text")
+
+    def test_a_line_of_only_commas_counts_every_field(self) -> None:
+        with self.assertRaises(ReadError) as ctx:
+            read(b"," * 10_000, max_cells=100)
+        self.assertEqual(ctx.exception.code, "too_many_cells")
 
     def test_too_many_cells_fails(self) -> None:
         with self.assertRaises(ReadError) as ctx:

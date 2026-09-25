@@ -1,6 +1,7 @@
 import io
 import unittest
 
+from kaagaz.ingestion.errors import BackendUnavailable
 from kaagaz.ingestion.ports import BlobNotFound, Job
 from kaagaz.jobs.worker import JobFailed, Worker
 from kaagaz.scanning.gate import (
@@ -29,7 +30,7 @@ class ScanGateTest(unittest.TestCase):
     def test_clean_file_is_marked_clean_and_stays_readable(self) -> None:
         scanner = FakeScanner(Verdict.CLEAN)
         gate, storage, statuses = make_gate(scanner)
-        gate.check(JOB)
+        self.assertEqual(gate.check(JOB), CONTENT)  # the exact bytes scanned
         self.assertEqual(scanner.scanned, [CONTENT])
         self.assertIs(statuses.get_status(CUSTOMER, DOC), DocumentStatus.CLEAN)
         self.assertEqual(storage.get(CUSTOMER, DOC), CONTENT)
@@ -74,6 +75,28 @@ class ScanGateTest(unittest.TestCase):
         with self.assertRaises(JobFailed) as ctx:
             gate.check(Job(CUSTOMER, "no-such-doc"))
         self.assertEqual((ctx.exception.code, ctx.exception.retryable), ("document_missing", False))
+
+    def test_rejected_document_is_refused_without_being_read_or_rescanned(self) -> None:
+        scanner = FakeScanner(Verdict.CLEAN)
+        gate, _, statuses = make_gate(scanner)
+        statuses.set_status(CUSTOMER, DOC, DocumentStatus.REJECTED)
+        with self.assertRaises(JobFailed) as ctx:
+            gate.check(JOB)
+        self.assertEqual((ctx.exception.code, ctx.exception.retryable), ("rejected", False))
+        self.assertEqual(scanner.scanned, [])
+        self.assertIs(statuses.get_status(CUSTOMER, DOC), DocumentStatus.REJECTED)
+
+    def test_status_is_rejected_even_if_moving_to_quarantine_fails(self) -> None:
+        class BrokenQuarantine:
+            def quarantine(self, customer_id: str, document_id: str) -> None:
+                raise BackendUnavailable("storage down")
+
+        storage, statuses = MemoryStorage(), MemoryStatuses()
+        storage.put(CUSTOMER, DOC, io.BytesIO(CONTENT))
+        gate = ScanGate(storage, FakeScanner(Verdict.INFECTED), BrokenQuarantine(), statuses)
+        with self.assertRaises(BackendUnavailable):
+            gate.check(JOB)
+        self.assertIs(statuses.get_status(CUSTOMER, DOC), DocumentStatus.REJECTED)
 
     def test_every_rejection_code_has_a_plain_customer_message(self) -> None:
         self.assertEqual(set(CUSTOMER_MESSAGES), {"virus_found", "unscannable"})
