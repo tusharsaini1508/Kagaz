@@ -50,6 +50,26 @@ Two rules hold the whole thing up:
 1. **No source, no answer.** A value without page coordinates cannot be verified, so it is never shown as fact.
 2. **Unreadable is a valid result.** A reader may refuse rather than guess.
 
+## Product and system design
+
+The complete product specification and technical design are published in the
+repository so the intended behaviour, boundaries, and open decisions can be
+reviewed alongside the code:
+
+- [System design index](docs/system-design/README.md): architecture, ingestion,
+       answering, data and tenancy, security, operations, and decisions.
+- [Sprint 1 product specification](docs/prd/sprint-1.html): the full visual PRD
+       covering scope, acceptance criteria, work order, approvals, questions, and
+       risks.
+
+```mermaid
+flowchart LR
+              product["Product spec<br/>scope and acceptance"] --> design["System design<br/>flows and boundaries"]
+              design --> build["Backend implementation<br/>readers, pipeline, jobs"]
+              build --> evidence["Tests and source coordinates<br/>trustworthy answers"]
+              evidence --> product
+```
+
 ---
 
 ## Stack

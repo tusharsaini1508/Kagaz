@@ -3,9 +3,16 @@
 One PRD per sprint, written by Tushar before any code is written, reviewed by
 Vrushit before any code is written.
 
+## Published specification
+
+- [Sprint 1: Foundation (full visual PRD)](sprint-1.html)
+
+The HTML document is the complete product brief, including scope, acceptance
+criteria, ordered work, approval questions, risks, and review status.
+
 ```
 TEMPLATE.md    copy this
-sprint-1.md    Foundation
+sprint-1.html   Foundation (published visual PRD)
 sprint-2.md    The Answer, MVP
 sprint-3.md    Trust
 sprint-4.md    Launch
