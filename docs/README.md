@@ -1,9 +1,15 @@
 # Documentation
 
-Short pages, written as the thing is built, not at the end of the project.
+The product and engineering documentation is organized so the intent is
+readable before the implementation details.
 
-- `prd/` One PRD per sprint, written before any code and approved before any code.
-- `decisions/` What we chose, what we rejected, and why.
-
-Everything else arrives during Sprint 1: the database diagram, how to run the
-project locally, and how a file becomes an answer.
+- [System design](system-design/README.md): the complete visual architecture,
+	ingestion and answering flows, data model, tenancy, security, operations,
+	and open decisions.
+- [Sprint PRDs](prd/README.md): product scope, acceptance criteria, work order,
+	approvals, questions, and risks for each sprint.
+- [Decision records](decisions/README.md): decisions that have been made,
+	rejected alternatives, and the owner of unresolved choices.
+- [Upload journey](upload-journey.md): the implementation-level path through
+	the current upload pipeline.
+- [Adding a reader](adding-a-reader.md): the reader plug-socket contract.

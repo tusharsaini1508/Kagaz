@@ -1,0 +1,738 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sprint 1 PRD</title>
+<style>
+  :root {
+    --bg: #f6f7f9;
+    --paper: #ffffff;
+    --ink: #1c2330;
+    --ink-soft: #4a5566;
+    --ink-faint: #7b8595;
+    --line: #dfe3ea;
+    --line-soft: #eef1f5;
+    --accent: #2f5bd3;
+    --accent-soft: #e8eefc;
+    --db: #2f5bd3;
+    --db-soft: #e8eefc;
+    --never: #b42336;
+    --never-soft: #fbe9ec;
+    --warn: #a15c00;
+    --warn-soft: #fff3df;
+    --ok: #1d7a4a;
+    --ok-soft: #e4f4ea;
+    --later: #6b46c1;
+    --later-soft: #f0ebfb;
+    --v: #8a5a00;
+    --v-soft: #fdf1d8;
+    --shadow: 0 1px 2px rgba(16, 24, 40, .06), 0 4px 16px rgba(16, 24, 40, .06);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #10141b;
+      --paper: #171c25;
+      --ink: #e6e9ef;
+      --ink-soft: #b3bbc8;
+      --ink-faint: #8791a1;
+      --line: #2a313d;
+      --line-soft: #202632;
+      --accent: #7ea2ff;
+      --accent-soft: #1f2a44;
+      --db: #7ea2ff;
+      --db-soft: #1f2a44;
+      --never: #ff8a98;
+      --never-soft: #3a1d23;
+      --warn: #ffbf5c;
+      --warn-soft: #3a2c15;
+      --ok: #6fd39c;
+      --ok-soft: #173325;
+      --later: #b9a0ff;
+      --later-soft: #2a2242;
+      --v: #f2c46b;
+      --v-soft: #372b12;
+      --shadow: none;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #10141b;
+    --paper: #171c25;
+    --ink: #e6e9ef;
+    --ink-soft: #b3bbc8;
+    --ink-faint: #8791a1;
+    --line: #2a313d;
+    --line-soft: #202632;
+    --accent: #7ea2ff;
+    --accent-soft: #1f2a44;
+    --db: #7ea2ff;
+    --db-soft: #1f2a44;
+    --never: #ff8a98;
+    --never-soft: #3a1d23;
+    --warn: #ffbf5c;
+    --warn-soft: #3a2c15;
+    --ok: #6fd39c;
+    --ok-soft: #173325;
+    --later: #b9a0ff;
+    --later-soft: #2a2242;
+    --v: #f2c46b;
+    --v-soft: #372b12;
+    --shadow: none;
+  }
+
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font: 15px/1.6 "Segoe UI", system-ui, -apple-system, Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  code {
+    font: 0.88em/1.4 "Cascadia Code", Consolas, "SFMono-Regular", Menlo, monospace;
+    background: var(--line-soft);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 0 4px;
+  }
+
+  /* ---------- toolbar (screen only) ---------- */
+  .toolbar {
+    position: sticky; top: 0; z-index: 10;
+    display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+    padding: 10px 16px;
+    background: var(--paper);
+    border-bottom: 1px solid var(--line);
+  }
+  .toolbar .name { font-weight: 600; margin-right: auto; }
+  .toolbar button {
+    font: inherit; font-size: 14px;
+    padding: 6px 12px;
+    border-radius: 6px;
+    border: 1px solid var(--line);
+    background: var(--paper);
+    color: var(--ink);
+    cursor: pointer;
+  }
+  .toolbar button:hover { border-color: var(--accent); }
+  .toolbar button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .toolbar button[aria-pressed="true"] { background: var(--warn-soft); border-color: var(--warn); color: var(--warn); }
+  .edit-hint {
+    display: none;
+    width: 100%;
+    font-size: 13px;
+    color: var(--warn);
+  }
+  body.editing .edit-hint { display: block; }
+  body.editing main [contenteditable="true"] { outline: none; }
+  body.editing .page { box-shadow: 0 0 0 2px var(--warn-soft), var(--shadow); }
+
+  /* ---------- layout ---------- */
+  .layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 24px;
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 24px 16px 64px;
+  }
+  @media (min-width: 1100px) {
+    .layout { grid-template-columns: 220px minmax(0, 1fr); }
+  }
+  nav.toc { display: none; }
+  @media (min-width: 1100px) {
+    nav.toc {
+      display: block;
+      position: sticky; top: 72px; align-self: start;
+      font-size: 13.5px;
+    }
+  }
+  nav.toc ol { list-style: none; margin: 0; padding: 0; }
+  nav.toc li a {
+    display: block; padding: 5px 10px;
+    border-left: 2px solid var(--line);
+    color: var(--ink-soft);
+  }
+  nav.toc li a:hover { border-left-color: var(--accent); color: var(--ink); text-decoration: none; }
+
+  .page {
+    background: var(--paper);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    box-shadow: var(--shadow);
+    padding: 40px 48px;
+    min-width: 0;
+  }
+  @media (max-width: 700px) {
+    .page { padding: 24px 18px; border-radius: 8px; }
+  }
+
+  /* ---------- header ---------- */
+  .eyebrow {
+    font-size: 12px; letter-spacing: .08em; text-transform: uppercase;
+    color: var(--accent); font-weight: 600;
+  }
+  h1 { font-size: 30px; line-height: 1.2; margin: 6px 0 20px; }
+  .meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1px;
+    background: var(--line);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    overflow: hidden;
+    margin-bottom: 18px;
+  }
+  .meta div { flex: 1 1 180px; background: var(--paper); padding: 10px 14px; }
+  .meta dt { font-size: 12px; color: var(--ink-faint); text-transform: uppercase; letter-spacing: .05em; }
+  .meta dd { margin: 2px 0 0; font-weight: 600; }
+  .meta dd.blank { color: var(--ink-faint); font-weight: 400; }
+
+  /* ---------- sections ---------- */
+  section { margin-top: 36px; }
+  h2 {
+    display: flex; align-items: baseline; gap: 12px;
+    font-size: 21px; line-height: 1.3;
+    margin: 0 0 14px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid var(--line-soft);
+  }
+  h2 .num {
+    flex: none;
+    display: inline-grid; place-items: center;
+    width: 30px; height: 30px;
+    border-radius: 8px;
+    background: var(--accent-soft); color: var(--accent);
+    font-size: 15px; font-weight: 700;
+  }
+  h3 { font-size: 16px; margin: 22px 0 10px; }
+  p { margin: 0 0 12px; }
+  ul, ol { margin: 0 0 12px; padding-left: 22px; }
+  li { margin: 4px 0; }
+  .muted { color: var(--ink-soft); }
+  .small { font-size: 13.5px; }
+
+  .callout {
+    border: 1px solid var(--line);
+    border-left: 4px solid var(--accent);
+    background: var(--accent-soft);
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin: 14px 0;
+  }
+  .callout.warn { border-left-color: var(--warn); background: var(--warn-soft); }
+  .callout.never { border-left-color: var(--never); background: var(--never-soft); }
+  .callout.ok { border-left-color: var(--ok); background: var(--ok-soft); }
+  .callout > :last-child { margin-bottom: 0; }
+  .callout strong:first-child { display: block; margin-bottom: 2px; }
+
+  blockquote.gate {
+    margin: 0 0 14px;
+    padding: 14px 18px;
+    border-radius: 8px;
+    background: var(--line-soft);
+    font-size: 16.5px; font-weight: 600;
+  }
+  blockquote.gate small { display: block; font-size: 12px; font-weight: 600; color: var(--ink-faint); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 4px; }
+
+  /* ---------- chips ---------- */
+  .chip {
+    display: inline-block;
+    font-size: 11.5px; font-weight: 700; line-height: 1;
+    letter-spacing: .03em;
+    padding: 4px 7px;
+    border-radius: 999px;
+    vertical-align: 1px;
+    white-space: nowrap;
+    border: 1px solid transparent;
+  }
+  .chip.db { color: var(--db); background: var(--db-soft); border-color: var(--db); }
+  .chip.never { color: var(--never); background: var(--never-soft); border-color: var(--never); }
+  .chip.s2, .chip.s3 { color: var(--later); background: var(--later-soft); border-color: var(--later); }
+  .chip.v { color: var(--v); background: var(--v-soft); border-color: var(--v); }
+  .chip.out { color: var(--ink-soft); background: var(--line-soft); border-color: var(--line); }
+  .chip.task { color: var(--ink-soft); background: var(--paper); border-color: var(--line); font-weight: 600; }
+
+  /* ---------- not-in-sprint list ---------- */
+  .scope { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
+  .scope li {
+    display: grid; grid-template-columns: 96px 1fr; gap: 12px; align-items: start;
+    margin: 0;
+    padding: 10px 12px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+  }
+  .scope li .chip { justify-self: start; margin-top: 3px; }
+  @media (max-width: 560px) { .scope li { grid-template-columns: 1fr; gap: 4px; } }
+
+  /* ---------- tables ---------- */
+  .table-wrap { overflow-x: auto; margin: 0 0 14px; border: 1px solid var(--line); border-radius: 10px; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: left; vertical-align: top; padding: 9px 11px; border-bottom: 1px solid var(--line); }
+  th { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--ink-faint); background: var(--line-soft); }
+  tr:last-child td { border-bottom: 0; }
+  td.n { color: var(--ink-faint); font-variant-numeric: tabular-nums; width: 34px; }
+  td.issue { font-weight: 700; white-space: nowrap; }
+  td .chip { margin: 2px 4px 2px 0; }
+  table.work td:nth-child(4) { color: var(--ink-soft); font-size: 0.95em; }
+  table.approve td:last-child, table.approve th:last-child { text-align: center; width: 90px; }
+  input[type="checkbox"] { width: 17px; height: 17px; accent-color: var(--ok); vertical-align: -3px; }
+
+  /* ---------- done-when ---------- */
+  .done { display: grid; gap: 8px; margin: 0 0 14px; }
+  .done div {
+    display: grid; grid-template-columns: 78px 1fr; gap: 12px;
+    padding: 9px 12px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    font-size: 14px;
+  }
+  .done b { font-variant-numeric: tabular-nums; }
+  .done i { color: var(--ink-soft); }
+  @media (max-width: 560px) { .done div { grid-template-columns: 1fr; gap: 2px; } }
+
+  /* ---------- estimate bars ---------- */
+  .capacity { display: grid; gap: 10px; margin: 12px 0 18px; }
+  .cap-row { display: grid; grid-template-columns: 150px 1fr 70px; gap: 12px; align-items: center; font-size: 14px; }
+  .cap-bar { height: 18px; border-radius: 5px; background: var(--line-soft); overflow: hidden; }
+  .cap-bar span { display: block; height: 100%; border-radius: 5px; }
+  .cap-bar .need { width: 100%; background: var(--never); }
+  .cap-bar .have { width: 45.7%; background: var(--ok); }
+  .cap-row b { text-align: right; font-variant-numeric: tabular-nums; }
+  @media (max-width: 560px) { .cap-row { grid-template-columns: 1fr 60px; } .cap-row .cap-bar { grid-column: 1 / -1; order: 3; } }
+
+  table.estimate { font-size: 13px; }
+  table.estimate th, table.estimate td { text-align: center; padding: 7px 6px; white-space: nowrap; }
+  table.estimate th { text-transform: none; }
+  table.estimate th:first-child, table.estimate td:first-child { text-align: left; }
+  table.estimate td.total { font-weight: 800; color: var(--never); }
+
+  /* ---------- decisions ---------- */
+  .checks { list-style: none; padding: 0; }
+  .checks li { position: relative; padding-left: 28px; margin: 8px 0; }
+  .checks li::before {
+    content: ""; position: absolute; left: 4px; top: 7px;
+    width: 12px; height: 7px;
+    border-left: 2.5px solid var(--ok); border-bottom: 2.5px solid var(--ok);
+    transform: rotate(-45deg);
+  }
+
+  /* ---------- questions ---------- */
+  .qgroup-title {
+    display: flex; align-items: center; gap: 10px;
+    font-size: 15px; margin: 22px 0 10px;
+  }
+  .qgroup-title .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--never); }
+  .qgroup-title.later .dot { background: var(--warn); }
+  .questions { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; }
+  .questions li {
+    display: grid; grid-template-columns: 36px 1fr; gap: 12px;
+    margin: 0;
+    padding: 12px 14px;
+    border: 1px solid var(--line);
+    border-left: 4px solid var(--never);
+    border-radius: 8px;
+    font-size: 14.5px;
+  }
+  .questions.later li { border-left-color: var(--warn); }
+  .questions .qn {
+    display: grid; place-items: center;
+    width: 30px; height: 30px; border-radius: 50%;
+    background: var(--never-soft); color: var(--never);
+    font-weight: 800; font-size: 14px;
+  }
+  .questions.later .qn { background: var(--warn-soft); color: var(--warn); }
+  .questions h4 { margin: 3px 0 4px; font-size: 15px; }
+  .questions h4 .chip { margin-left: 6px; }
+  .questions p { margin: 0; }
+  .rec { display: block; margin-top: 6px; color: var(--ok); font-weight: 600; }
+
+  /* ---------- risks ---------- */
+  .risks { list-style: none; padding: 0; display: grid; gap: 8px; }
+  .risks li { margin: 0; padding: 10px 14px; border: 1px solid var(--line); border-radius: 8px; }
+  .never-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+
+  /* ---------- confirm + review ---------- */
+  .confirm { list-style: none; padding: 0; }
+  .confirm li { display: flex; gap: 10px; align-items: flex-start; margin: 8px 0; }
+  .confirm input { margin-top: 3px; flex: none; }
+  .review {
+    border: 2px dashed var(--line);
+    border-radius: 12px;
+    padding: 18px 20px;
+  }
+  .review .field { margin: 0 0 14px; }
+  .review .label { font-weight: 700; }
+  .review .choice { display: inline-flex; gap: 18px; margin-left: 10px; font-weight: 400; }
+  .review .line { border-bottom: 1px solid var(--line); min-height: 28px; margin-top: 4px; }
+  .review .line + .line { min-height: 26px; }
+
+  footer.src { margin-top: 32px; font-size: 12.5px; color: var(--ink-faint); border-top: 1px solid var(--line-soft); padding-top: 12px; }
+
+  /* ---------- print / PDF ---------- */
+  @page { size: A4; margin: 14mm 13mm 16mm; }
+  @media print {
+    :root, :root[data-theme="dark"] {
+      --bg: #fff; --paper: #fff; --ink: #111; --ink-soft: #3d4450; --ink-faint: #6b7280;
+      --line: #d5dae2; --line-soft: #f0f2f5;
+      --accent: #2346b8; --accent-soft: #eef2fc;
+      --db: #2346b8; --db-soft: #eef2fc;
+      --never: #a3182b; --never-soft: #fcecee;
+      --warn: #8d5100; --warn-soft: #fff5e6;
+      --ok: #16683e; --ok-soft: #e9f6ee;
+      --later: #5b3aa8; --later-soft: #f3effc;
+      --v: #7a4f00; --v-soft: #fdf4e0;
+      --shadow: none;
+    }
+    * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    body { background: #fff; font-size: 10.2pt; line-height: 1.45; }
+    .toolbar, nav.toc, .screen-only { display: none !important; }
+    .layout { display: block; padding: 0; max-width: none; }
+    .page { border: 0; box-shadow: none !important; border-radius: 0; padding: 0; }
+    h1 { font-size: 21pt; margin-bottom: 12px; }
+    h2 { font-size: 14pt; break-after: avoid; page-break-after: avoid; }
+    h3, .qgroup-title { break-after: avoid; page-break-after: avoid; }
+    section { margin-top: 20px; }
+    #review { break-inside: avoid; page-break-inside: avoid; }
+    tr, .done div, .questions li, .scope li, .risks li, .callout, .meta, .cap-row, .review .field {
+      break-inside: avoid; page-break-inside: avoid;
+    }
+    .table-wrap { overflow: visible; }
+    table { font-size: 9pt; }
+    th, td { padding: 5px 7px; }
+    table.estimate { font-size: 8.4pt; }
+    table.estimate th, table.estimate td { padding: 4px 3px; }
+    a { color: inherit; }
+    .review { border-color: #9aa3b2; }
+    .review .line { border-bottom-color: #9aa3b2; }
+  }
+</style>
+</head>
+<body>
+
+<div class="toolbar screen-only" role="toolbar" aria-label="Document actions">
+  <span class="name">Sprint 1 PRD</span>
+  <button type="button" id="btn-edit" aria-pressed="false">Edit text</button>
+  <button type="button" id="btn-save">Download HTML</button>
+  <button type="button" id="btn-print" class="primary">Print / Save as PDF</button>
+  <span class="edit-hint" role="status">Editing is on. Click any text to change it. Browser edits are not saved to disk until you press Download HTML.</span>
+</div>
+
+<div class="layout">
+  <nav class="toc" aria-label="Contents">
+    <ol>
+      <li><a href="#s1">1. What this sprint delivers</a></li>
+      <li><a href="#s2">2. What it does not deliver</a></li>
+      <li><a href="#s3">3. How I will know it is done</a></li>
+      <li><a href="#s4">4. The work, in order</a></li>
+      <li><a href="#s5">5. My own decisions</a></li>
+      <li><a href="#s6">6. Needs approval</a></li>
+      <li><a href="#s7">7. Questions</a></li>
+      <li><a href="#s8">8. What could make this slip</a></li>
+      <li><a href="#s9">9. Before I start</a></li>
+      <li><a href="#review">Vrushit's review</a></li>
+    </ol>
+  </nav>
+
+  <main class="page" id="doc">
+
+    <header>
+      <div class="eyebrow">Kaagaz &middot; Sprint PRD</div>
+      <h1>Sprint 1 PRD: Foundation</h1>
+      <dl class="meta">
+        <div><dt>Written by</dt><dd>Tushar</dd></div>
+        <div><dt>Date</dt><dd>23 Sep 2026</dd></div>
+        <div><dt>Sprint dates</dt><dd>Wed 23 Sep to Tue 29 Sep 2026, 5 working days</dd></div>
+        <div><dt>Reviewed by Vrushit on</dt><dd class="blank">&nbsp;</dd></div>
+        <div><dt>Status</dt><dd><span class="chip v">Draft</span> Claude Code draft, not yet rewritten by Tushar.</dd></div>
+      </dl>
+      <div class="callout warn">
+        <p>Drafted with Claude Code on 23 Sep from the delivery plan, issues #1 to #36 and my own notes, then checked by a set of AI reviewers. Before the review I rewrite every section in my own words and replace every estimate with my own.</p>
+      </div>
+    </header>
+
+    <!-- 1 -->
+    <section id="s1">
+      <h2><span class="num">1</span>What this sprint delivers</h2>
+      <p>By Tuesday a customer can upload files, and each file is kept under that customer only. Every file is virus scanned before anything opens it, and stored once even if it is uploaded twice. Office files are turned into PDFs, phone photos into a standard image format, and a picture is saved of every page. If the file is a clean digital file (a normal PDF, Excel or CSV), its text is pulled out directly, with no AI, and stored in pieces that each know where they came from. A bare screen lists the files with their status and can open a page and draw a box on it. Nothing intelligent yet.</p>
+      <div class="callout">
+        <strong>Why this matters later</strong>
+        <p>Sprint 2 highlights the exact spot an answer came from, using the page pictures and positions stored now. If a position is missing or wrong now, no later sprint can point at the page.</p>
+      </div>
+    </section>
+
+    <!-- 2 -->
+    <section id="s2">
+      <h2><span class="num">2</span>What this sprint deliberately does not deliver</h2>
+      <ul class="scope">
+        <li><span class="chip s2">Sprint 2</span><span>Reading scanned pages and photos with AI. Sprint 2 D1, after Vrushit picks the scan reader (due Fri 25 Sep). Sprint 1 only marks what needs a reader (#19).</span></li>
+        <li><span class="chip never">Proposal</span><span>Masking Aadhaar and PAN, not in this sprint as planned. The plan puts it in Sprint 2 D1, but Sprint 1 already stores text. I propose moving it, see <a href="#q1">question 1</a>.</span></li>
+        <li><span class="chip s2">Sprint 2</span><span>Turning text pieces into searchable form, including meaning vectors in pgvector. Sprint 2 D2. Sprint 1 stores the pieces and nothing else.</span></li>
+        <li><span class="chip s2">Sprint 2</span><span>Chat, answers, "not found", Hinglish questions.</span></li>
+        <li><span class="chip s3">Sprint 3</span><span>Verified and needs review labels, the second reader, the correction screen where a reviewer sees both readings side by side and picks the right one, remembering corrections per customer. My own notes go further than the plan here, see <a href="#q16">question 16</a>.</span></li>
+        <li><span class="chip out">No sprint</span><span>Login is not in any sprint of the plan. #1 designs a users table and #35 needs a second customer account, but no task builds sign in. See <a href="#q3">question 3</a>.</span></li>
+        <li><span class="chip v">Vrushit</span><span>Built by Vrushit this sprint, not by me: cloud groundwork (#11, D2), the database with customer separation switched on (#12, D2), deployment to a test environment (#13, D3). I build on my own machine. Merged code deploys to the test environment.</span></li>
+        <li><span class="chip out">Never</span><span>Reading Hindi or Devanagari documents. Not ever at launch.</span></li>
+      </ul>
+    </section>
+
+    <!-- 3 -->
+    <section id="s3">
+      <h2><span class="num">3</span>How I will know it is done</h2>
+      <blockquote class="gate"><small>The plan's gate</small>Files go in, text comes out of clean files, a picture exists of every page, and nothing leaks between customers.</blockquote>
+      <p>In practice: fifty mixed files go through the pipeline with every failure explained and timings recorded (#24), the separation test passes on every pull request (#23), and Vrushit's four UAT checks pass (#33 to #36). What counts as a pass is <a href="#q7">question 7</a>.</p>
+    </section>
+
+    <!-- 4 -->
+    <section id="s4">
+      <h2><span class="num">4</span>The work, in the order I plan to do it</h2>
+      <p class="muted small"><span class="chip db">DB</span> means the task touches the database or customer separation. CLAUDE.md says those get a written plan on the issue, approved by Vrushit, before any code. See <a href="#q2">question 2</a>. <span class="chip never">Never cut</span> marks the issues labelled never-cut.</p>
+
+      <div class="table-wrap">
+        <table class="work">
+          <thead>
+            <tr><th>#</th><th>Issue</th><th>What it is</th><th>Waits for</th><th>Why it comes here</th></tr>
+          </thead>
+          <tbody>
+            <tr><td class="n">1</td><td class="issue">#6</td><td>This PRD</td><td>Nothing</td><td>Nothing starts before it is approved.</td></tr>
+            <tr><td class="n">2</td><td class="issue">#14</td><td>Upload endpoint: fingerprint, skip duplicates, store under the customer's prefix, queue a job. <span class="chip db">DB</span></td><td>#1, #2, #9, #11 naming rule, #12, upload limits, Q3</td><td>The front door. Every later step needs a file to have landed.</td></tr>
+            <tr><td class="n">3</td><td class="issue">#23</td><td>Isolation test, first at the database, then each endpoint as it lands. <span class="chip db">DB</span> <span class="chip never">Never cut</span></td><td>#2, #12, #14, Q3, Q8</td><td>Starts with the first customer owned data.</td></tr>
+            <tr><td class="n">4</td><td class="issue">#15</td><td>Virus scan gate. <span class="chip db">DB</span> <span class="chip never">Never cut</span></td><td>Scanner library, #9, #14, Q4</td><td>Before any step that opens a file. If the scan runs in the worker, it moves after #16.</td></tr>
+            <tr><td class="n">5</td><td class="issue">#16</td><td>Background worker, retries, failure bin. <span class="chip db">DB</span></td><td>#9, #12, queue settings</td><td>Every step after this runs inside the worker.</td></tr>
+            <tr><td class="n">6</td><td class="issue">#22a</td><td>Upload control and file list with status. <span class="chip db">DB</span></td><td>#14, #16, Q5, frontend libraries</td><td>#33 has Vrushit upload twenty files through the UI, so this cannot be last.</td></tr>
+            <tr><td class="n">7</td><td class="issue">#17</td><td>File preparation: Office to PDF, phone photos, straighten scans</td><td>Libraries, #11 naming rule</td><td>Every step after this assumes a prepared file.</td></tr>
+            <tr><td class="n">8</td><td class="issue">#18</td><td>Picture of every page. <span class="chip db">DB</span> <span class="chip never">Never cut</span></td><td>Rendering library, #1, #11, #12, Q12</td><td>The viewer and the Sprint 2 reader both need it.</td></tr>
+            <tr><td class="n">9</td><td class="issue">#19</td><td>Read clean digital files directly. <span class="chip db">DB</span></td><td>PDF and Excel libraries, #3, Q6, Q7</td><td>Cheapest path, no AI.</td></tr>
+            <tr><td class="n">10</td><td class="issue">#21</td><td>Reader plug socket, stand in reader <span class="chip never">Never cut</span></td><td>#3</td><td>Before #20, so #20 only gets text through the socket.</td></tr>
+            <tr><td class="n">11</td><td class="issue">#20</td><td>Split text into pieces and store them. <span class="chip db">DB</span></td><td>#1, #12, #21</td><td>Needs text with positions coming out of the socket.</td></tr>
+            <tr><td class="n">12</td><td class="issue">#22b</td><td>Page viewer with highlight box. <span class="chip db">DB</span></td><td>#18, #20, PDF.js approved, Q5, Q6</td><td>Shows what the backend already stores.</td></tr>
+            <tr><td class="n">13</td><td class="issue">#25, #26</td><td>Duplicate upload test, corrupt file test</td><td>#14, #16, #17</td><td>Close the cases #14 and #16 do not cover.</td></tr>
+            <tr><td class="n">14</td><td class="issue">#24</td><td>Fifty mixed files end to end, with timings</td><td>#14 to #18, Q7</td><td>Early timings help set the queue settings.</td></tr>
+            <tr><td class="n">15</td><td class="issue">#27</td><td>CI green on every pull request</td><td>#10</td><td>Ongoing all sprint.</td></tr>
+            <tr><td class="n">16</td><td class="issue">#31, #32</td><td>Docs: the upload journey, how to add a reader</td><td>#16, #21</td><td>Written as each part lands, finished on D5.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="callout">
+        <strong>If Vrushit's D1 and D2 pieces are late</strong>
+        <p>Once #9 exists, the parts that touch no database go first: fingerprinting (#14), then #17 and #18 as soon as their libraries are approved. They are wired into the worker when #16 exists. #19 waits for #3, so positions are not redone, and it is only ever reached through the socket (#21). In the real pipeline the virus scan always runs before anything opens a file.</p>
+      </div>
+
+      <h3>Done when</h3>
+      <p class="muted small">One line per task, taken from each issue's acceptance criteria. Words in <i>brackets</i> make a criterion checkable, they add no scope.</p>
+      <div class="done">
+        <div><b>#14</b><span>Every file gets a content fingerprint; a posted file is stored under the uploading customer's own prefix and a job is queued; the same file twice is stored once and the reply says so; an oversized file is refused. Tests for a normal upload, a duplicate and an oversized file.</span></div>
+        <div><b>#23</b><span>Two customers with data, neither can read the other, at the database <i>(connected as the restricted application role, not a superuser)</i> and at the API <i>(every endpoint that lists documents or takes a document id, called with the other customer's ids)</i>; includes a deliberately wrong customer id. Marked <code>isolation</code>, runs on every pull request.</span></div>
+        <div><b>#15</b><span>A file is scanned before any other step touches it; a failed file is quarantined and never processed; the customer sees a clear message; <i>(a scanner error or timeout never counts as clean)</i>. Tests for a clean file, a rejected file <i>(and the scanner being down)</i>.</span></div>
+        <div><b>#16</b><span>A worker picks jobs off the queue and processes them; a failed job retries a set number of times, then moves to the failure bin; a long running job is not picked up twice; a poison job cannot block everything behind it, proven by a test <i>(using a controlled clock, no sleeps)</i>.</span></div>
+        <div><b>#22a</b><span>A list of uploaded files with their processing status <i>(as a word, with the reason when rejected or failed)</i>; an upload control that handles several files at once <i>(one result per file)</i>.</span></div>
+        <div><b>#17</b><span>Office files become PDFs; phone photos become a standard image format; crooked scans are straightened <i>(a page turned by a known angle comes out straight within an agreed tolerance)</i>; an unsupported file type fails with a clear message. Tests cover at least one file of each kind.</span></div>
+        <div><b>#18</b><span>Every page of every document has a picture, under the customer's own prefix, with page number and dimensions recorded; a hundred page document gives a hundred pictures, proven by a test.</span></div>
+        <div><b>#19</b><span>Normal PDFs, Excel and CSV are read without any AI; text comes out with its page number and position; spreadsheets keep their row and column structure; a scanned PDF with no text layer is marked as needing a reader. Tests cover each file type.</span></div>
+        <div><b>#21</b><span>One interface that matches the contract in docs/; a stand in reader behind it returns what direct reading found; no application code calls a reader directly <i>(a test fails if code outside the socket imports a reader)</i>; a test double shows a second reader touches only its own module.</span></div>
+        <div><b>#20</b><span>Text is split along its layout, not at a fixed character count; each piece stores its document, page and position and can be traced back to the exact spot. Tests cover a multi page document and a spreadsheet.</span></div>
+        <div><b>#22b</b><span>A viewer opens a given page and draws a highlight box at given coordinates on it <i>(a test opens a known page and checks where the box is)</i>.</span></div>
+        <div><b>#25</b><span>The same file uploaded twice gives one stored document and the second upload says it was a duplicate; two different files with similar names are both stored.</span></div>
+        <div><b>#26</b><span>A truncated or corrupt file fails with a clear message and lands in the failure bin; the queue keeps processing everything behind it.</span></div>
+        <div><b>#24</b><span>Fifty mixed files uploaded; all stored, prepared and with page pictures; every failure explained, not just counted; timings recorded on the issue.</span></div>
+        <div><b>#27</b><span>Every Sprint 1 pull request ran CI; none merged with CI red; the pipeline runs in under five minutes.</span></div>
+        <div><b>#31</b><span>One page, plain English, no jargon; names each step from upload to stored text pieces and says what happens when each step fails; in docs/.</span></div>
+        <div><b>#32</b><span>Step by step with the interface spelled out; says what a reader must return and what it may refuse; someone can follow it without asking; in docs/.</span></div>
+      </div>
+
+      <h3>Roughly how long, in half days</h3>
+      <p class="muted small">Claude Code's first guesses. I replace them with mine before the review.</p>
+      <div class="capacity" aria-label="Estimated work against time left">
+        <div class="cap-row"><span>Work on the list</span><div class="cap-bar"><span class="need"></span></div><b>17.5</b></div>
+        <div class="cap-row"><span>Time left, at most</span><div class="cap-bar"><span class="have"></span></div><b>8</b></div>
+      </div>
+      <div class="table-wrap">
+        <table class="estimate">
+          <thead>
+            <tr><th></th><th>#14</th><th>#23</th><th>#15</th><th>#16</th><th>#22a</th><th>#17</th><th>#18</th><th>#19</th><th>#21</th><th>#20</th><th>#22b</th><th>#25, #26</th><th>#24</th><th>#31, #32</th><th>Total</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Estimate</td><td>2</td><td>1</td><td>1</td><td>2</td><td>1</td><td>2</td><td>1</td><td>2</td><td>1</td><td>1</td><td>1</td><td>0.5</td><td>1</td><td>1</td><td class="total">17.5</td></tr>
+            <tr><td>Plan's day</td><td>D1</td><td>test</td><td>D1</td><td>D2</td><td>D4</td><td>D2</td><td>D3</td><td>D3</td><td>D4</td><td>D3</td><td>D4</td><td>test</td><td>test</td><td>docs</td><td></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>At most 8 half days are left (Thu 24 to Tue 29 Sep), fewer once the review and the plan-first waits are counted, and Day 5 is also UAT. See <a href="#s8">section 8</a>.</p>
+    </section>
+
+    <!-- 5 -->
+    <section id="s5">
+      <h2><span class="num">5</span>Decisions I am making myself</h2>
+      <ul class="checks">
+        <li>The fingerprint is a SHA-256 hash of the file's bytes, from Python's standard library. No new dependency.</li>
+        <li>#21 comes before #20, and #22 is split into two pull requests: upload and file list early for #33, the viewer after #20. The day tags are the intended order, not a rule (CONTRIBUTING.md:43), and this keeps #20 behind the socket.</li>
+        <li>The retry count and how long a running job stays hidden are read from settings, never hard coded. The values are yours (section 6). I suggest 3 attempts.</li>
+        <li>Each pipeline step is its own small module under <code>backend/</code>, and each issue is its own pull request, under about 300 lines.</li>
+        <li>Tests ship with the code. Every pull request that adds customer owned data, or an endpoint or storage path that returns it, extends the isolation test and marks it <code>isolation</code>.</li>
+        <li>Customer messages say what happened and what to do next. Messages, stored failure reasons, log lines and failure bin entries carry an error code and ids only: never file contents, file names, parser error text or storage paths.</li>
+        <li>Automated tests use small synthetic files I make, or that the test generates (such as the hundred page PDF), committed with the tests, each under 2MB, with no real or real looking identity numbers. <code>samples/</code>, which git ignores, is only for my manual runs. No real document goes into the repo.</li>
+        <li>The screens are bare but usable: plain HTML controls, a labelled file input (no drag and drop needed), status as a word and not only a colour, loading, empty and error states said in words, usable by keyboard. No new library for this.</li>
+      </ul>
+    </section>
+
+    <!-- 6 -->
+    <section id="s6">
+      <h2><span class="num">6</span>Things I need approved before I start</h2>
+      <div class="table-wrap">
+        <table class="approve">
+          <thead>
+            <tr><th>What</th><th>Why I need it</th><th>Blocks</th><th>Approved</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><b>Database design</b> for every Sprint 1 table (#1)</td><td>I must not design tables. What my tasks need to do with stored data is listed below.</td><td>#14, #15, #16, #18, #19, #20, #22</td><td><input type="checkbox" aria-label="Database design approved"></td></tr>
+            <tr><td><b>Customer separation rule</b> (#2) and the database with separation on (#12), including how the worker sets the current customer for a job</td><td>Every query I write follows it, and #23 proves it.</td><td>#14, #16, #18, #20, #22, #23</td><td><input type="checkbox" aria-label="Customer separation approved"></td></tr>
+            <tr><td><b>Duplicates per customer only</b>, never across customers</td><td>Detecting across customers would tell customer B that customer A holds the same file. That is a leak.</td><td>#14, #25</td><td><input type="checkbox" aria-label="Duplicate scope approved"></td></tr>
+            <tr><td><b>Reader plug socket contract</b> (#3), including the coordinate format (<a href="#q6">question 6</a>)</td><td>#21 must match it exactly. #19, #20 and #22b depend on the same coordinates.</td><td>#19, #20, #21, #22b</td><td><input type="checkbox" aria-label="Reader contract approved"></td></tr>
+            <tr><td><b>Storage prefix and object naming rule</b> (#11), on my machine too: where originals, prepared files, page pictures and quarantined files go; objects named by a random id, the original name kept only as data and never in the path; the original never overwritten</td><td>#14, #15, #17 and #18 all write files there. My notes assume the original stays byte for byte the same.</td><td>#14, #15, #17, #18</td><td><input type="checkbox" aria-label="Storage naming approved"></td></tr>
+            <tr><td><b>Local and CI stand ins</b> (#9) for S3, SQS and the virus scanner. The local scanner must really scan, for example reject the standard EICAR test file.</td><td>#14, #15, #16 and their tests cannot run without them. MinIO, which I had in my notes, is AGPL-3.0 (checked on GitHub), so CLAUDE.md rules it out.</td><td>#14, #15, #16</td><td><input type="checkbox" aria-label="Stand ins approved"></td></tr>
+            <tr><td><b>Queue settings</b>: attempts before the failure bin, how long a running job stays hidden</td><td>#16 needs "a set number" and "not picked up twice".</td><td>#16, #26</td><td><input type="checkbox" aria-label="Queue settings approved"></td></tr>
+            <tr><td><b>Upload security limits</b>: maximum file size; accepted types, checked by content and not by name or browser type; maximum pages per document and image pixels; limits for zip based Office files; files per request; whether password PDFs, archives, SVG, HTML and macro Office files are refused; whether conversion may reach the network; whether location data is stripped from photos; a time limit per job. <span class="rec">My suggestion: refuse anything not on the list.</span></td><td>Security settings are yours. #14 must test an oversized file, #17 an unsupported type, and one bad file must not stall the queue for every customer.</td><td>#14, #17, #18, #19</td><td><input type="checkbox" aria-label="Upload limits approved"></td></tr>
+            <tr><td><b>Libraries</b>, each with name and licence: virus scanning, Office to PDF, phone photo conversion, straightening, PDF text with positions, page rendering, Excel reading, a frontend test tool, and the exact FastAPI, Next.js and PDF.js packages. PDF.js must be 4.2.67 or later: earlier versions run JavaScript from a crafted PDF (CVE-2024-4367, checked on GitHub).</td><td>Nothing in these tasks can be built without one. I have picked none.</td><td>#15, #17, #18, #19, #22</td><td><input type="checkbox" aria-label="Libraries approved"></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>What my tasks must be able to do with stored data</h3>
+      <p class="muted small">Input for #1, not a design.</p>
+      <ul>
+        <li><b>#14, #25:</b> find whether this customer already has a file with this fingerprint, and keep one copy even if the same file arrives twice at the same moment.</li>
+        <li><b>#15, #16, #22a, #26:</b> show each document's status and a plain reason when it failed. The issues imply: waiting, rejected by the scan, in progress, needs a reader, done, failed.</li>
+        <li><b>#18:</b> know each page's number, its size, and its picture's pixel size, and find its picture.</li>
+        <li><b>#19, #20:</b> know for each page whether it was read directly or needs a reader; for each text piece, its document and every place it covers (page and box, per line), so Sprint 2 can highlight the exact spot and not the whole piece.</li>
+        <li><b>#1, #3:</b> keep each reader's raw output whole, per page, with which reader produced it, next to the cleaned text. Pieces point back to it.</li>
+      </ul>
+    </section>
+
+    <!-- 7 -->
+    <section id="s7">
+      <h2><span class="num">7</span>Questions</h2>
+
+      <div class="qgroup-title"><span class="dot"></span>Blocking. I need these answered in the review.</div>
+      <ol class="questions">
+        <li id="q1"><span class="qn">1</span><div><h4>Masking <span class="chip never">Never cut</span></h4><p>Sprint 1 stores text (#19, #20) but masking is Sprint 2 D1. Real invoices in #33 print GSTINs, which contain the full PAN, so real documents would put full PANs into stored text, raw reader output, file names, and possibly logs. Options: <b>(A)</b> move the masking task ahead of #20, about 2 more half days (a guess) on an already full sprint; <b>(B)</b> no text from real documents is stored until masking lands, so #33 and #36 run on real files and #34 on synthetic ones; <b>(C)</b> a written, dated exception from you. Either way, does masking also cover raw reader output and file names?</p><span class="rec">I recommend A, because masking is on the never cut list.</span></div></li>
+        <li id="q2"><span class="qn">2</span><div><h4>Design docs and plans</h4><p>#1, #2 and #3 are not in <code>docs/</code> yet. When do they land? None of my issues carry the <code>needs-plan</code> label, but the tasks marked DB in section 4 touch the database or separation. Which need a plan comment first?</p></div></li>
+        <li id="q3"><span class="qn">3</span><div><h4>Knowing the customer, and where UAT runs</h4><p>No sprint builds login. How does the upload endpoint know which customer is uploading? #35 edits ids in the request and must fail, so the stand in has to be something the server checks, not a customer id the client sends. Where do #33 to #36 run, my machine or the #13 test environment? Who can reach that environment before login exists, and may it hold real documents?</p></div></li>
+        <li id="q4"><span class="qn">4</span><div><h4>Where the virus scan runs</h4><p>Inside the upload request before the job is queued, or as the first step in the worker? Is fingerprinting allowed before the scan (it reads the bytes, it does not open the file)? Until the scan passes, and after it fails, where is the file kept, for how long, and can anything ever serve it?</p></div></li>
+        <li id="q5"><span class="qn">5</span><div><h4>Read endpoints for #22</h4><p>The file list and the viewer need the backend to list a customer's files and return a page. No issue names these endpoints. Are they part of #22, or a new issue? They read customer data, so I post a plan first and #23 tests each one with another customer's ids. What does that caller get: the same "not found" as a missing document? They are not in my estimate.</p></div></li>
+        <li id="q6"><span class="qn">6</span><div><h4>Coordinates</h4><p>Does the viewer draw on the PDF through PDF.js or on the #18 page picture? When #17 straightens a scan, does the straightened image go into the prepared PDF, so the viewer, the picture and the reader all see the same page? Does a piece keep one box, or a box per line (and per word)? And the stand in reader in #21 wraps #19's output, right?</p><span class="rec">My suggestion: one format everywhere, measured from the top left of the page as it is shown (after the PDF rotation flag and after straightening), in PDF points or fractions of the page width and height.</span></div></li>
+        <li id="q7"><span class="qn">7</span><div><h4>Scans and the pass bar</h4><p>Is a PDF judged per page or per document? Some PDFs mix text pages and scanned pages, and scanners often add a hidden text layer. For #33, does a scanned sample that is stored, pictured and marked as needing a reader count as "processed without a manual fix"? Does #24 need all fifty to pass, or are explained failures fine?</p><span class="rec">My suggestion: per page, and a page that needs a reader gets its own status, not a failure.</span></div></li>
+        <li id="q8"><span class="qn">8</span><div><h4>Isolation tests in CI</h4><p>CI connects as <code>POSTGRES_USER: kaagaz</code> (ci.yml:198). The Postgres image makes that user a superuser, and superusers skip row level security. Which role do the #23 tests use in CI? The plan says checked at every layer, #23 says API and database: does it cover file storage too, so B cannot fetch A's page picture? In CI, are S3, SQS and the scanner real local services or fakes?</p></div></li>
+      </ol>
+
+      <div class="qgroup-title later"><span class="dot"></span>Before the named task starts.</div>
+      <ol class="questions later">
+        <li id="q9"><span class="qn">9</span><div><h4>Running twice <span class="chip task">#16</span><span class="chip task">#18</span><span class="chip task">#20</span></h4><p>The queue can hand out the same job twice, and retries re-run the steps. After running twice, must #18 and #20 leave one set of pictures and pieces? Should corrupt or unsupported files skip the retries, since retrying cannot fix them?</p></div></li>
+        <li id="q10"><span class="qn">10</span><div><h4>Uploading again <span class="chip task">#14</span><span class="chip task">#25</span></h4><p>If the first copy was rejected or failed, is uploading it again a duplicate or a new attempt? If an upload stops part way (file saved, no job queued), how does the document get unstuck? No issue re-runs a document from the failure bin.</p></div></li>
+        <li id="q11"><span class="qn">11</span><div><h4>Spreadsheets <span class="chip task">#17</span><span class="chip task">#19</span><span class="chip task">#20</span></h4><p>A cell has a sheet, row and column, not a page. Is a CSV turned into a PDF too? When an answer points at a cell, do we highlight it on the converted page picture, or show the cell? If conversion splits a wide sheet or drops hidden rows, which one is the truth? Do we keep the value shown or the formula? Also, #17 turns photos into a standard image, but the plan says images become PDFs. Which one?</p></div></li>
+        <li id="q12"><span class="qn">12</span><div><h4>Page pictures <span class="chip task">#18</span></h4><p>What resolution and format? The Sprint 2 reader reads them too, and the standards I follow suggest at least 300 DPI. One picture for both the viewer and the reader, or two?</p></div></li>
+        <li id="q13"><span class="qn">13</span><div><h4>Straightening <span class="chip task">#17</span><span class="chip task">#36</span></h4><p>Does "right way up" in #36 need tilt fixing, or only turning pages upright from the photo orientation tag and the PDF rotation flag? What tolerance counts as straight?</p></div></li>
+        <li id="q14"><span class="qn">14</span><div><h4>Layout <span class="chip task">#20</span></h4><p>Is a table row kept whole with its headings? Is a two column page read column by column? #34 checks the order line by line.</p></div></li>
+        <li id="q15"><span class="qn">15</span><div><h4>Several files and odd files <span class="chip task">#14</span><span class="chip task">#22a</span></h4><p>One request per file, or several files in one request, and with what limit?</p><span class="rec">My suggestion: refuse a 0 byte file and a PDF with no pages, with a clear message.</span></div></li>
+        <li id="q16"><span class="qn">16</span><div><h4>My notes, for Sprint 3 <span class="chip s3">Can wait longest</span></h4><p>In my notes, a page photographed with a phone could later be retaken, an uploaded PDF could not, so a document would remember how it arrived. Corrections would change the extracted text and the search index, never the original file. None of this is in the plan.</p><span class="rec">My suggestion: leave it to the Sprint 3 correction screen design, and only keep originals unchanged from day one (the storage row in section 6).</span></div></li>
+      </ol>
+
+      <p class="muted small" style="margin-top:14px">The repo doc conflicts I found (branch prefix <code>feat/</code> against <code>feature/</code>, section numbers in the PRD README and template, CI time) are not for this review. I post them on #8 instead.</p>
+    </section>
+
+    <!-- 8 -->
+    <section id="s8">
+      <h2><span class="num">8</span>What could make this slip</h2>
+      <ul class="risks">
+        <li><b>The list is more than twice the time left.</b> 17.5 half days of guesses against at most 8. The biggest gaps against the plan's days are #14, #16, #17 and #22. Every plan-first wait adds time on top.</li>
+        <li>My D1 and D2 work waits on #1, #2, #3, #9, #12 and on library approvals. The database free work in section 4 softens this, it does not remove it.</li>
+        <li>#17 needs the most libraries and has the most unknowns.</li>
+      </ul>
+      <div class="callout warn">
+        <strong>Proposal for you to decide in this review</strong>
+        <p>If #18, #19 and #20 are not merged by the end of Mon 28 Sep (D4): (1) tilt fixing in #17 moves to Sprint 2, while turning pages upright stays, so #36 still passes; (2) uploading several files at once in #22a moves to Sprint 2, while single file upload stays, because #33 uploads through the UI. Neither is on the plan's cut list, which has no Sprint 1 items, so this needs your written yes below.</p>
+      </div>
+      <div class="callout never">
+        <strong>Never dropped</strong>
+        <div class="never-row">
+          <span class="chip never">#15 Virus scan</span>
+          <span class="chip never">#18 Page pictures</span>
+          <span class="chip never">#21 Plug socket</span>
+          <span class="chip never">#23 Isolation test</span>
+          <span class="chip never">Masking, if option A</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- 9 -->
+    <section id="s9">
+      <h2><span class="num">9</span>Before I start, I confirm</h2>
+      <ul class="confirm">
+        <li><input type="checkbox" id="c1"><label for="c1">I have read CLAUDE.md and CONTRIBUTING.md in this sprint, not just once months ago</label></li>
+        <li><input type="checkbox" id="c2"><label for="c2">Every issue I listed has acceptance criteria, and I understand each one</label></li>
+        <li><input type="checkbox" id="c3"><label for="c3">I know which of my tasks touch the database or customer separation</label></li>
+        <li><input type="checkbox" id="c4"><label for="c4">I know what CI will check, and I can run those checks locally before opening a pull request</label></li>
+      </ul>
+    </section>
+
+    <!-- review -->
+    <section id="review">
+      <h2><span class="num">&#10003;</span>Vrushit's review</h2>
+      <div class="review">
+        <div class="field"><span class="label">Approach:</span><span class="choice"><label><input type="checkbox"> Approved</label><label><input type="checkbox"> Changes needed</label></span></div>
+        <div class="field"><span class="label">Answers to the questions above:</span><div class="line"></div><div class="line"></div><div class="line"></div></div>
+        <div class="field"><span class="label">Changes I want to the plan:</span><div class="line"></div><div class="line"></div></div>
+        <div class="field"><span class="label">Anything I am adding or removing from the sprint:</span><div class="line"></div><div class="line"></div></div>
+        <div class="field"><span class="label">Approved on:</span><div class="line"></div></div>
+      </div>
+    </section>
+
+    <footer class="src screen-only">Source of truth: <code>docs/prd/sprint-1.md</code> in the repo. This page is a local formatted copy, never committed. Regenerate it after the Markdown changes.</footer>
+  </main>
+</div>
+
+<script>
+  (function () {
+    var doc = document.getElementById("doc");
+    var editBtn = document.getElementById("btn-edit");
+
+    function setEditing(on) {
+      doc.setAttribute("contenteditable", on ? "true" : "false");
+      document.body.classList.toggle("editing", on);
+      editBtn.setAttribute("aria-pressed", on ? "true" : "false");
+      editBtn.textContent = on ? "Stop editing" : "Edit text";
+    }
+
+    editBtn.addEventListener("click", function () {
+      setEditing(doc.getAttribute("contenteditable") !== "true");
+    });
+
+    document.getElementById("btn-print").addEventListener("click", function () {
+      window.print();
+    });
+
+    document.getElementById("btn-save").addEventListener("click", function () {
+      var wasEditing = doc.getAttribute("contenteditable") === "true";
+      setEditing(false);
+      doc.removeAttribute("contenteditable");
+      // Keep ticked boxes in the saved file.
+      Array.prototype.forEach.call(document.querySelectorAll('input[type="checkbox"]'), function (box) {
+        if (box.checked) { box.setAttribute("checked", ""); } else { box.removeAttribute("checked"); }
+      });
+      var html = "<!DOCTYPE html>\n" + document.documentElement.outerHTML;
+      var blob = new Blob([html], { type: "text/html" });
+      var link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = "sprint-1.html";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(function () { URL.revokeObjectURL(link.href); }, 1000);
+      if (wasEditing) { setEditing(true); }
+    });
+  })();
+</script>
+</body>
+</html>
